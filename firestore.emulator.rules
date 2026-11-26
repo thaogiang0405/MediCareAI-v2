@@ -493,724 +493,200 @@ service cloud.firestore {
     }
 
 
-    // Phase 03 — connection roles are always derived from the canonical user profile.
-    function hasValidFamilyAccount(uid) {
-      let profilePath = /databases/$(database)/documents/users/$(uid);
-      return exists(profilePath)
-        && hasValidUserProfileSchema(get(profilePath).data)
-        && get(profilePath).data.uid == uid
-        && get(profilePath).data.primaryRole == 'caregiver'
-        && get(profilePath).data.roles.caregiver == true
-        && get(profilePath).data.roles.elderly == false
-        && get(profilePath).data.onboardingCompleted == true;
+    function isFamily(uid) {
+      let p = /databases/$(database)/documents/users/$(uid);
+      return exists(p) && get(p).data.uid == uid
+        && get(p).data.primaryRole == 'caregiver'
+        && get(p).data.roles.caregiver == true
+        && get(p).data.roles.elderly == false
+        && get(p).data.onboardingCompleted == true;
     }
-
-    function hasValidSeniorAccount(uid) {
-      let profilePath = /databases/$(database)/documents/users/$(uid);
-      return exists(profilePath)
-        && hasValidUserProfileSchema(get(profilePath).data)
-        && get(profilePath).data.uid == uid
-        && get(profilePath).data.primaryRole == 'elderly'
-        && get(profilePath).data.roles.elderly == true
-        && get(profilePath).data.roles.caregiver == false
-        && get(profilePath).data.onboardingCompleted == true;
+    function isSenior(uid) {
+      let p = /databases/$(database)/documents/users/$(uid);
+      return exists(p) && get(p).data.uid == uid
+        && get(p).data.primaryRole == 'elderly'
+        && get(p).data.roles.elderly == true
+        && get(p).data.roles.caregiver == false
+        && get(p).data.onboardingCompleted == true;
     }
-
-    function hasFreeConnectionMember(uid) {
-      let memberPath = /databases/$(database)/documents/connectionMembers/$(uid);
-      return !exists(memberPath) || get(memberPath).data.status == 'disconnected';
+    function memberAvailable(uid) {
+      let p = /databases/$(database)/documents/connectionMembers/$(uid);
+      return !exists(p) || get(p).data.status == 'disconnected';
     }
-
-    function hasExactConnectionInviteFields(data) {
-      return data.keys().hasAll([
-          'familyUid', 'familyDisplayName', 'status', 'createdAt',
-          'expiresAt', 'usedBy', 'usedAt', 'connectionId', 'updatedAt'
-        ])
-        && data.keys().hasOnly([
-          'familyUid', 'familyDisplayName', 'status', 'createdAt',
-          'expiresAt', 'usedBy', 'usedAt', 'connectionId', 'updatedAt'
-        ]);
+    function validCode(code) {
+      return code.matches('^[A-HJ-NP-Z2-9]{8}$');
     }
-
-    function hasValidConnectionInviteSchema(code, data) {
-      return hasExactConnectionInviteFields(data)
-        && code.matches('^[A-HJ-NP-Z2-9]{8} `get` deliberately
-    // excludes collection queries so users cannot enumerate other profiles.
-    match /users/{uid} {
-      allow get: if ownsUser(uid);
-      allow list: if false;
-      allow create: if isValidInitialUserProfile(uid);
-      allow update: if isValidUserProfileUpdate(uid);
-      allow delete: if false;
-
-      // Device, notification, and index schemas are not part of M2.3 yet.
-      match /{document=**} {
-        allow read, write: if false;
-      }
-    }
-
-    // A role selected by the client is not a health-data authorization grant.
-    // These surfaces remain closed until their schema, server workflow, and
-    // emulator coverage are approved in a later milestone.
-    match /caregiverProfiles/{document=**} {
-      allow read, write: if false;
-    }
-
-    match /caregiverInvites/{document=**} {
-      allow read, write: if false;
-    }
-
-
-    // Phase 03 — private, one-use family connection workflow.
-    match /connectionInvites/{code} {
-      allow get: if signedIn()
-        && (
-          (resource.data.familyUid == request.auth.uid && hasValidFamilyAccount(request.auth.uid))
-          || (
-            hasValidSeniorAccount(request.auth.uid)
-            && resource.data.status in ['active', 'used']
-            && exists(/databases/$(database)/documents/connectionInviteSlots/$(resource.data.familyUid))
-            && get(/databases/$(database)/documents/connectionInviteSlots/$(resource.data.familyUid)).data.inviteCode == code
-          )
-        );
-      allow list: if false;
-      allow create: if isValidConnectionInviteCreate(code);
-      allow update: if isValidConnectionInviteRevoke(code) || isValidConnectionInviteUse(code);
-      allow delete: if false;
-    }
-
-    match /connectionInviteSlots/{familyUid} {
-      allow get: if signedIn() && request.auth.uid == familyUid && hasValidFamilyAccount(familyUid);
-      allow list: if false;
-      allow create: if isValidConnectionInviteSlotCreate(familyUid);
-      allow update: if isValidConnectionInviteSlotFamilyUpdate(familyUid)
-        || isValidConnectionInviteSlotUse(familyUid);
-      allow delete: if false;
-    }
-
-    match /connections/{connectionId} {
-      allow get: if isConnectionParticipant(resource.data);
-      allow list: if false;
-      allow create: if isValidConnectionCreate(connectionId);
-      allow update: if isValidConnectionDisconnect(connectionId);
-      allow delete: if false;
-    }
-
-    match /connectionMembers/{uid} {
-      allow get: if signedIn() && request.auth.uid == uid;
-      allow list: if false;
-      allow create: if isValidConnectedMember(uid, request.resource.data);
-      allow update: if isValidConnectedMember(uid, request.resource.data)
-        || isValidConnectionMemberDisconnect(uid);
-      allow delete: if false;
-    }
-
-
-    // M3.2: an elderly owner may access only their own medication records.
-    // A profile role from the UI never grants access; the canonical M2.3
-    // `/users/{uid}` document is checked for every operation.
-    match /elderlyProfiles/{uid}/medications/{medicationId} {
-      allow get, list: if hasValidElderlyProfile(uid);
-      allow create: if isValidMedicationCreate(uid);
-      allow update: if isValidMedicationUpdate(uid);
-      allow delete: if false;
-    }
-
-    // M3.3: schedules use the same elderly-owner boundary as medications.
-    // They never grant notification, DoseEvent, or caregiver access.
-    match /elderlyProfiles/{uid}/medicationSchedules/{scheduleId} {
-      allow get, list: if hasValidElderlyProfile(uid);
-      allow create: if isValidMedicationScheduleCreate(uid);
-      allow update: if isValidMedicationScheduleUpdate(uid);
-      allow delete: if false;
-    }
-
-    // M3.4: an elderly owner may create and read exactly one immutable
-    // self-reported response for a real planned occurrence. Client updates,
-    // deletes, notification documents, and caregiver access remain denied.
-    match /elderlyProfiles/{uid}/doseEvents/{doseEventId} {
-      allow get, list: if hasValidElderlyProfile(uid);
-      allow create: if isValidDoseEventCreate(uid, doseEventId);
-      allow update, delete: if false;
-    }
-
-    match /elderlyProfiles/{document=**} {
-      allow read, write: if false;
-    }
-
-    // Explicit default-deny for every future collection and subcollection.
-    match /{document=**} {
-      allow read, write: if false;
-    }
-  }
-})
-        && data.familyUid is string
-        && data.familyDisplayName is string
-        && data.familyDisplayName.size() >= 2
-        && data.familyDisplayName.size() <= 120
-        && data.status in ['active', 'used', 'revoked']
-        && data.createdAt is timestamp
-        && data.expiresAt is timestamp
+    function validInvite(data, code) {
+      return data.keys().hasOnly(['familyUid','familyDisplayName','status','createdAt','expiresAt','usedBy','usedAt','connectionId','updatedAt'])
+        && data.familyUid is string && data.familyDisplayName is string
+        && data.status in ['active','used','revoked'] && validCode(code)
+        && data.createdAt is timestamp && data.expiresAt is timestamp
         && (data.usedBy == null || data.usedBy is string)
         && (data.usedAt == null || data.usedAt is timestamp)
         && (data.connectionId == null || data.connectionId is string)
         && data.updatedAt is timestamp;
     }
-
-    function hasExactConnectionInviteSlotFields(data) {
-      return data.keys().hasAll([
-          'familyUid', 'inviteCode', 'status', 'createdAt',
-          'expiresAt', 'usedBy', 'usedAt', 'connectionId', 'updatedAt'
-        ])
-        && data.keys().hasOnly([
-          'familyUid', 'inviteCode', 'status', 'createdAt',
-          'expiresAt', 'usedBy', 'usedAt', 'connectionId', 'updatedAt'
-        ]);
-    }
-
-    function hasValidConnectionInviteSlotSchema(data) {
-      return hasExactConnectionInviteSlotFields(data)
-        && data.familyUid is string
-        && data.inviteCode is string
-        && data.inviteCode.matches('^[A-HJ-NP-Z2-9]{8} `get` deliberately
-    // excludes collection queries so users cannot enumerate other profiles.
-    match /users/{uid} {
-      allow get: if ownsUser(uid);
-      allow list: if false;
-      allow create: if isValidInitialUserProfile(uid);
-      allow update: if isValidUserProfileUpdate(uid);
-      allow delete: if false;
-
-      // Device, notification, and index schemas are not part of M2.3 yet.
-      match /{document=**} {
-        allow read, write: if false;
-      }
-    }
-
-    // A role selected by the client is not a health-data authorization grant.
-    // These surfaces remain closed until their schema, server workflow, and
-    // emulator coverage are approved in a later milestone.
-    match /caregiverProfiles/{document=**} {
-      allow read, write: if false;
-    }
-
-    match /caregiverInvites/{document=**} {
-      allow read, write: if false;
-    }
-
-    // M3.2: an elderly owner may access only their own medication records.
-    // A profile role from the UI never grants access; the canonical M2.3
-    // `/users/{uid}` document is checked for every operation.
-    match /elderlyProfiles/{uid}/medications/{medicationId} {
-      allow get, list: if hasValidElderlyProfile(uid);
-      allow create: if isValidMedicationCreate(uid);
-      allow update: if isValidMedicationUpdate(uid);
-      allow delete: if false;
-    }
-
-    // M3.3: schedules use the same elderly-owner boundary as medications.
-    // They never grant notification, DoseEvent, or caregiver access.
-    match /elderlyProfiles/{uid}/medicationSchedules/{scheduleId} {
-      allow get, list: if hasValidElderlyProfile(uid);
-      allow create: if isValidMedicationScheduleCreate(uid);
-      allow update: if isValidMedicationScheduleUpdate(uid);
-      allow delete: if false;
-    }
-
-    // M3.4: an elderly owner may create and read exactly one immutable
-    // self-reported response for a real planned occurrence. Client updates,
-    // deletes, notification documents, and caregiver access remain denied.
-    match /elderlyProfiles/{uid}/doseEvents/{doseEventId} {
-      allow get, list: if hasValidElderlyProfile(uid);
-      allow create: if isValidDoseEventCreate(uid, doseEventId);
-      allow update, delete: if false;
-    }
-
-    match /elderlyProfiles/{document=**} {
-      allow read, write: if false;
-    }
-
-    // Explicit default-deny for every future collection and subcollection.
-    match /{document=**} {
-      allow read, write: if false;
-    }
-  }
-})
-        && data.status in ['active', 'used']
-        && data.createdAt is timestamp
-        && data.expiresAt is timestamp
+    function validSlot(data) {
+      return data.keys().hasOnly(['familyUid','inviteCode','status','createdAt','expiresAt','usedBy','usedAt','connectionId','updatedAt'])
+        && data.familyUid is string && validCode(data.inviteCode)
+        && data.status in ['active','used'] && data.createdAt is timestamp
+        && data.expiresAt is timestamp && data.updatedAt is timestamp
         && (data.usedBy == null || data.usedBy is string)
         && (data.usedAt == null || data.usedAt is timestamp)
-        && (data.connectionId == null || data.connectionId is string)
-        && data.updatedAt is timestamp;
+        && (data.connectionId == null || data.connectionId is string);
     }
-
-    function hasExactConnectionFields(data) {
-      return data.keys().hasAll([
-          'familyUid', 'seniorUid', 'familyDisplayName', 'seniorDisplayName',
-          'status', 'createdAt', 'connectedAt', 'disconnectedAt',
-          'disconnectedBy', 'updatedAt'
-        ])
-        && data.keys().hasOnly([
-          'familyUid', 'seniorUid', 'familyDisplayName', 'seniorDisplayName',
-          'status', 'createdAt', 'connectedAt', 'disconnectedAt',
-          'disconnectedBy', 'updatedAt'
-        ]);
-    }
-
-    function hasValidConnectionSchema(data) {
-      return hasExactConnectionFields(data)
-        && data.familyUid is string
-        && data.seniorUid is string
-        && data.familyUid != data.seniorUid
-        && data.familyDisplayName is string
-        && data.familyDisplayName.size() >= 2
-        && data.familyDisplayName.size() <= 120
-        && data.seniorDisplayName is string
-        && data.seniorDisplayName.size() >= 2
-        && data.seniorDisplayName.size() <= 120
-        && data.status in ['connected', 'disconnected']
-        && data.createdAt is timestamp
-        && data.connectedAt is timestamp
+    function validConnection(data, code) {
+      return data.keys().hasOnly(['familyUid','seniorUid','familyDisplayName','seniorDisplayName','status','createdAt','connectedAt','disconnectedAt','disconnectedBy','updatedAt'])
+        && data.familyUid is string && data.seniorUid is string
+        && data.familyUid != data.seniorUid && validCode(code)
+        && data.familyDisplayName is string && data.seniorDisplayName is string
+        && data.status in ['connected','disconnected']
+        && data.createdAt is timestamp && data.connectedAt is timestamp
         && (data.disconnectedAt == null || data.disconnectedAt is timestamp)
         && (data.disconnectedBy == null || data.disconnectedBy is string)
         && data.updatedAt is timestamp;
     }
-
-    function hasExactConnectionMemberFields(data) {
-      return data.keys().hasAll([
-          'uid', 'role', 'counterpartUid', 'counterpartDisplayName',
-          'connectionId', 'status', 'createdAt', 'updatedAt'
-        ])
-        && data.keys().hasOnly([
-          'uid', 'role', 'counterpartUid', 'counterpartDisplayName',
-          'connectionId', 'status', 'createdAt', 'updatedAt'
-        ]);
+    function validMember(data, uid) {
+      return data.keys().hasOnly(['uid','role','counterpartUid','counterpartDisplayName','connectionId','status','createdAt','updatedAt'])
+        && data.uid == uid && data.role in ['family','senior']
+        && data.counterpartUid is string && data.counterpartUid != uid
+        && data.counterpartDisplayName is string && validCode(data.connectionId)
+        && data.status in ['connected','disconnected']
+        && data.createdAt is timestamp && data.updatedAt is timestamp;
     }
-
-    function hasValidConnectionMemberSchema(data) {
-      return hasExactConnectionMemberFields(data)
-        && data.uid is string
-        && data.role in ['family', 'senior']
-        && data.counterpartUid is string
-        && data.uid != data.counterpartUid
-        && data.counterpartDisplayName is string
-        && data.counterpartDisplayName.size() >= 2
-        && data.counterpartDisplayName.size() <= 120
-        && data.connectionId is string
-        && data.connectionId.matches('^[A-HJ-NP-Z2-9]{8} `get` deliberately
-    // excludes collection queries so users cannot enumerate other profiles.
-    match /users/{uid} {
-      allow get: if ownsUser(uid);
-      allow list: if false;
-      allow create: if isValidInitialUserProfile(uid);
-      allow update: if isValidUserProfileUpdate(uid);
-      allow delete: if false;
-
-      // Device, notification, and index schemas are not part of M2.3 yet.
-      match /{document=**} {
-        allow read, write: if false;
-      }
+    function connectionParticipant(data) {
+      return signedIn() && (request.auth.uid == data.familyUid || request.auth.uid == data.seniorUid);
     }
-
-    // A role selected by the client is not a health-data authorization grant.
-    // These surfaces remain closed until their schema, server workflow, and
-    // emulator coverage are approved in a later milestone.
-    match /caregiverProfiles/{document=**} {
-      allow read, write: if false;
+    function createInvite(code) {
+      let d = request.resource.data;
+      let slot = /databases/$(database)/documents/connectionInviteSlots/$(request.auth.uid);
+      return signedIn() && isFamily(request.auth.uid) && validInvite(d, code)
+        && d.familyUid == request.auth.uid && d.familyDisplayName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
+        && d.status == 'active' && d.createdAt == request.time && d.updatedAt == request.time
+        && d.expiresAt > request.time && d.expiresAt <= request.time + duration.value(15,'m')
+        && d.usedBy == null && d.usedAt == null && d.connectionId == null
+        && memberAvailable(request.auth.uid) && existsAfter(slot)
+        && getAfter(slot).data.inviteCode == code && getAfter(slot).data.status == 'active'
+        && getAfter(slot).data.expiresAt == d.expiresAt;
     }
-
-    match /caregiverInvites/{document=**} {
-      allow read, write: if false;
+    function createSlot(uid) {
+      let d = request.resource.data;
+      let invite = /databases/$(database)/documents/connectionInvites/$(d.inviteCode);
+      return signedIn() && isFamily(request.auth.uid) && uid == request.auth.uid
+        && validSlot(d) && d.familyUid == uid && d.status == 'active'
+        && d.createdAt == request.time && d.updatedAt == request.time
+        && d.expiresAt > request.time && d.expiresAt <= request.time + duration.value(15,'m')
+        && d.usedBy == null && d.usedAt == null && d.connectionId == null
+        && memberAvailable(uid) && existsAfter(invite)
+        && getAfter(invite).data.familyUid == uid && getAfter(invite).data.status == 'active'
+        && getAfter(invite).data.expiresAt == d.expiresAt;
     }
-
-    // M3.2: an elderly owner may access only their own medication records.
-    // A profile role from the UI never grants access; the canonical M2.3
-    // `/users/{uid}` document is checked for every operation.
-    match /elderlyProfiles/{uid}/medications/{medicationId} {
-      allow get, list: if hasValidElderlyProfile(uid);
-      allow create: if isValidMedicationCreate(uid);
-      allow update: if isValidMedicationUpdate(uid);
-      allow delete: if false;
+    function updateSlotFamily(uid) {
+      let d = request.resource.data;
+      let newInvite = /databases/$(database)/documents/connectionInvites/$(d.inviteCode);
+      let oldInvite = /databases/$(database)/documents/connectionInvites/$(resource.data.inviteCode);
+      return signedIn() && isFamily(request.auth.uid) && uid == request.auth.uid
+        && resource.data.familyUid == uid && validSlot(d) && d.familyUid == uid
+        && d.inviteCode != resource.data.inviteCode && d.status == 'active'
+        && d.createdAt == request.time && d.updatedAt == request.time
+        && d.expiresAt > request.time && d.expiresAt <= request.time + duration.value(15,'m')
+        && d.usedBy == null && d.usedAt == null && d.connectionId == null
+        && memberAvailable(uid)
+        && (resource.data.status != 'active' || (existsAfter(oldInvite) && getAfter(oldInvite).data.status == 'revoked'))
+        && existsAfter(newInvite) && getAfter(newInvite).data.status == 'active'
+        && getAfter(newInvite).data.familyUid == uid && getAfter(newInvite).data.expiresAt == d.expiresAt;
     }
-
-    // M3.3: schedules use the same elderly-owner boundary as medications.
-    // They never grant notification, DoseEvent, or caregiver access.
-    match /elderlyProfiles/{uid}/medicationSchedules/{scheduleId} {
-      allow get, list: if hasValidElderlyProfile(uid);
-      allow create: if isValidMedicationScheduleCreate(uid);
-      allow update: if isValidMedicationScheduleUpdate(uid);
-      allow delete: if false;
+    function useInvite(code) {
+      let slot = /databases/$(database)/documents/connectionInviteSlots/$(resource.data.familyUid);
+      let conn = /databases/$(database)/documents/connections/$(code);
+      return signedIn() && isSenior(request.auth.uid) && resource.data.status == 'active'
+        && resource.data.expiresAt > request.time && request.resource.data.status == 'used'
+        && request.resource.data.usedBy == request.auth.uid && request.resource.data.usedAt == request.time
+        && request.resource.data.connectionId == code && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','usedBy','usedAt','connectionId','updatedAt'])
+        && exists(slot) && get(slot).data.inviteCode == code && get(slot).data.status == 'active'
+        && get(slot).data.expiresAt > request.time && existsAfter(slot)
+        && getAfter(slot).data.status == 'used' && getAfter(slot).data.usedBy == request.auth.uid
+        && existsAfter(conn) && getAfter(conn).data.status == 'connected'
+        && getAfter(conn).data.seniorUid == request.auth.uid;
     }
-
-    // M3.4: an elderly owner may create and read exactly one immutable
-    // self-reported response for a real planned occurrence. Client updates,
-    // deletes, notification documents, and caregiver access remain denied.
-    match /elderlyProfiles/{uid}/doseEvents/{doseEventId} {
-      allow get, list: if hasValidElderlyProfile(uid);
-      allow create: if isValidDoseEventCreate(uid, doseEventId);
-      allow update, delete: if false;
-    }
-
-    match /elderlyProfiles/{document=**} {
-      allow read, write: if false;
-    }
-
-    // Explicit default-deny for every future collection and subcollection.
-    match /{document=**} {
-      allow read, write: if false;
-    }
-  }
-})
-        && data.status in ['connected', 'disconnected']
-        && data.createdAt is timestamp
-        && data.updatedAt is timestamp;
-    }
-
-    function isConnectionParticipant(data) {
-      return signedIn()
-        && (request.auth.uid == data.familyUid || request.auth.uid == data.seniorUid);
-    }
-
-    function isValidConnectionInviteCreate(code) {
-      let data = request.resource.data;
-      let slotPath = /databases/$(database)/documents/connectionInviteSlots/$(data.familyUid);
-      let profilePath = /databases/$(database)/documents/users/$(request.auth.uid);
-      return signedIn()
-        && hasValidFamilyAccount(request.auth.uid)
-        && hasValidConnectionInviteSchema(code, data)
-        && data.familyUid == request.auth.uid
-        && data.familyDisplayName == get(profilePath).data.displayName
-        && data.status == 'active'
-        && data.createdAt == request.time
-        && data.updatedAt == request.time
-        && data.expiresAt > request.time
-        && data.expiresAt <= request.time + duration.value(15, 'm')
-        && data.usedBy == null
-        && data.usedAt == null
-        && data.connectionId == null
-        && hasFreeConnectionMember(request.auth.uid)
-        && existsAfter(slotPath)
-        && getAfter(slotPath).data.familyUid == request.auth.uid
-        && getAfter(slotPath).data.inviteCode == code
-        && getAfter(slotPath).data.status == 'active'
-        && getAfter(slotPath).data.expiresAt == data.expiresAt;
-    }
-
-    function isValidConnectionInviteRevoke(code) {
-      let slotPath = /databases/$(database)/documents/connectionInviteSlots/$(resource.data.familyUid);
-      return signedIn()
-        && hasValidFamilyAccount(request.auth.uid)
-        && resource.data.familyUid == request.auth.uid
-        && resource.data.status == 'active'
-        && request.resource.data.status == 'revoked'
-        && request.resource.data.updatedAt == request.time
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
-        && existsAfter(slotPath)
-        && getAfter(slotPath).data.inviteCode != code;
-    }
-
-    function isValidConnectionInviteUse(code) {
-      let slotPath = /databases/$(database)/documents/connectionInviteSlots/$(resource.data.familyUid);
-      let connectionPath = /databases/$(database)/documents/connections/$(code);
-      return signedIn()
-        && hasValidSeniorAccount(request.auth.uid)
-        && resource.data.status == 'active'
-        && resource.data.expiresAt > request.time
-        && request.resource.data.status == 'used'
-        && request.resource.data.usedBy == request.auth.uid
-        && request.resource.data.usedAt == request.time
-        && request.resource.data.connectionId == code
-        && request.resource.data.updatedAt == request.time
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status', 'usedBy', 'usedAt', 'connectionId', 'updatedAt'
-        ])
-        && exists(slotPath)
-        && get(slotPath).data.inviteCode == code
-        && get(slotPath).data.status == 'active'
-        && get(slotPath).data.expiresAt > request.time
-        && existsAfter(slotPath)
-        && getAfter(slotPath).data.status == 'used'
-        && getAfter(slotPath).data.usedBy == request.auth.uid
-        && getAfter(slotPath).data.connectionId == code
-        && existsAfter(connectionPath)
-        && getAfter(connectionPath).data.status == 'connected'
-        && getAfter(connectionPath).data.seniorUid == request.auth.uid;
-    }
-
-    function isValidConnectionInviteSlotCreate(uid) {
-      let data = request.resource.data;
-      let invitePath = /databases/$(database)/documents/connectionInvites/$(data.inviteCode);
-      return signedIn()
-        && hasValidFamilyAccount(request.auth.uid)
-        && uid == request.auth.uid
-        && hasValidConnectionInviteSlotSchema(data)
-        && data.familyUid == uid
-        && data.status == 'active'
-        && data.createdAt == request.time
-        && data.updatedAt == request.time
-        && data.expiresAt > request.time
-        && data.expiresAt <= request.time + duration.value(15, 'm')
-        && data.usedBy == null
-        && data.usedAt == null
-        && data.connectionId == null
-        && hasFreeConnectionMember(uid)
-        && existsAfter(invitePath)
-        && getAfter(invitePath).data.familyUid == uid
-        && getAfter(invitePath).data.status == 'active'
-        && getAfter(invitePath).data.expiresAt == data.expiresAt;
-    }
-
-    function isValidConnectionInviteSlotFamilyUpdate(uid) {
-      let data = request.resource.data;
-      let newInvitePath = /databases/$(database)/documents/connectionInvites/$(data.inviteCode);
-      let oldInvitePath = /databases/$(database)/documents/connectionInvites/$(resource.data.inviteCode);
-      return signedIn()
-        && hasValidFamilyAccount(request.auth.uid)
-        && uid == request.auth.uid
-        && resource.data.familyUid == uid
-        && hasValidConnectionInviteSlotSchema(data)
-        && data.familyUid == uid
-        && data.inviteCode != resource.data.inviteCode
-        && data.status == 'active'
-        && data.createdAt == request.time
-        && data.updatedAt == request.time
-        && data.expiresAt > request.time
-        && data.expiresAt <= request.time + duration.value(15, 'm')
-        && data.usedBy == null
-        && data.usedAt == null
-        && data.connectionId == null
-        && hasFreeConnectionMember(uid)
-        && (
-          resource.data.status != 'active'
-          || (existsAfter(oldInvitePath) && getAfter(oldInvitePath).data.status == 'revoked')
-        )
-        && existsAfter(newInvitePath)
-        && getAfter(newInvitePath).data.familyUid == uid
-        && getAfter(newInvitePath).data.status == 'active'
-        && getAfter(newInvitePath).data.expiresAt == data.expiresAt;
-    }
-
-    function isValidConnectionInviteSlotUse(uid) {
-      let invitePath = /databases/$(database)/documents/connectionInvites/$(resource.data.inviteCode);
-      let connectionPath = /databases/$(database)/documents/connections/$(resource.data.inviteCode);
-      return signedIn()
-        && hasValidSeniorAccount(request.auth.uid)
-        && resource.data.familyUid == uid
-        && resource.data.status == 'active'
-        && request.resource.data.familyUid == resource.data.familyUid
+    function useSlot(uid) {
+      let invite = /databases/$(database)/documents/connectionInvites/$(resource.data.inviteCode);
+      let conn = /databases/$(database)/documents/connections/$(resource.data.inviteCode);
+      return signedIn() && isSenior(request.auth.uid) && resource.data.familyUid == uid
+        && resource.data.status == 'active' && request.resource.data.familyUid == uid
         && request.resource.data.inviteCode == resource.data.inviteCode
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.expiresAt == resource.data.expiresAt
-        && request.resource.data.status == 'used'
-        && request.resource.data.usedBy == request.auth.uid
-        && request.resource.data.usedAt == request.time
-        && request.resource.data.connectionId == resource.data.inviteCode
+        && request.resource.data.status == 'used' && request.resource.data.usedBy == request.auth.uid
+        && request.resource.data.usedAt == request.time && request.resource.data.connectionId == resource.data.inviteCode
         && request.resource.data.updatedAt == request.time
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status', 'usedBy', 'usedAt', 'connectionId', 'updatedAt'
-        ])
-        && existsAfter(invitePath)
-        && getAfter(invitePath).data.status == 'used'
-        && existsAfter(connectionPath)
-        && getAfter(connectionPath).data.status == 'connected'
-        && getAfter(connectionPath).data.familyUid == uid
-        && getAfter(connectionPath).data.seniorUid == request.auth.uid;
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','usedBy','usedAt','connectionId','updatedAt'])
+        && existsAfter(invite) && getAfter(invite).data.status == 'used'
+        && existsAfter(conn) && getAfter(conn).data.status == 'connected'
+        && getAfter(conn).data.familyUid == uid && getAfter(conn).data.seniorUid == request.auth.uid;
     }
-
-    function isValidConnectionCreate(code) {
-      let data = request.resource.data;
-      let invitePath = /databases/$(database)/documents/connectionInvites/$(code);
-      let slotPath = /databases/$(database)/documents/connectionInviteSlots/$(data.familyUid);
-      let familyMemberPath = /databases/$(database)/documents/connectionMembers/$(data.familyUid);
-      let seniorMemberPath = /databases/$(database)/documents/connectionMembers/$(data.seniorUid);
-      let familyProfilePath = /databases/$(database)/documents/users/$(data.familyUid);
-      let seniorProfilePath = /databases/$(database)/documents/users/$(data.seniorUid);
-      return signedIn()
-        && hasValidSeniorAccount(request.auth.uid)
-        && hasValidConnectionSchema(data)
-        && code.matches('^[A-HJ-NP-Z2-9]{8} `get` deliberately
-    // excludes collection queries so users cannot enumerate other profiles.
-    match /users/{uid} {
-      allow get: if ownsUser(uid);
-      allow list: if false;
-      allow create: if isValidInitialUserProfile(uid);
-      allow update: if isValidUserProfileUpdate(uid);
-      allow delete: if false;
-
-      // Device, notification, and index schemas are not part of M2.3 yet.
-      match /{document=**} {
-        allow read, write: if false;
-      }
+    function createConnection(code) {
+      let d = request.resource.data;
+      let invite = /databases/$(database)/documents/connectionInvites/$(code);
+      let slot = /databases/$(database)/documents/connectionInviteSlots/$(d.familyUid);
+      let fm = /databases/$(database)/documents/connectionMembers/$(d.familyUid);
+      let sm = /databases/$(database)/documents/connectionMembers/$(d.seniorUid);
+      return signedIn() && isSenior(request.auth.uid) && validConnection(d,code)
+        && d.seniorUid == request.auth.uid && isFamily(d.familyUid)
+        && d.familyDisplayName == get(/databases/$(database)/documents/users/$(d.familyUid)).data.displayName
+        && d.seniorDisplayName == get(/databases/$(database)/documents/users/$(d.seniorUid)).data.displayName
+        && d.status == 'connected' && d.createdAt == request.time && d.connectedAt == request.time
+        && d.updatedAt == request.time && d.disconnectedAt == null && d.disconnectedBy == null
+        && memberAvailable(d.familyUid) && memberAvailable(d.seniorUid)
+        && exists(invite) && get(invite).data.familyUid == d.familyUid
+        && get(invite).data.status == 'active' && get(invite).data.expiresAt > request.time
+        && exists(slot) && get(slot).data.inviteCode == code && get(slot).data.status == 'active'
+        && existsAfter(invite) && getAfter(invite).data.status == 'used'
+        && getAfter(invite).data.usedBy == request.auth.uid
+        && existsAfter(slot) && getAfter(slot).data.status == 'used'
+        && getAfter(slot).data.usedBy == request.auth.uid
+        && existsAfter(fm) && getAfter(fm).data.connectionId == code
+        && getAfter(fm).data.status == 'connected'
+        && existsAfter(sm) && getAfter(sm).data.connectionId == code
+        && getAfter(sm).data.status == 'connected';
     }
-
-    // A role selected by the client is not a health-data authorization grant.
-    // These surfaces remain closed until their schema, server workflow, and
-    // emulator coverage are approved in a later milestone.
-    match /caregiverProfiles/{document=**} {
-      allow read, write: if false;
+    function createMember(uid,d) {
+      let conn = /databases/$(database)/documents/connections/$(d.connectionId);
+      let famUid = d.role == 'family' ? uid : d.counterpartUid;
+      let invite = /databases/$(database)/documents/connectionInvites/$(d.connectionId);
+      let slot = /databases/$(database)/documents/connectionInviteSlots/$(famUid);
+      return signedIn() && isSenior(request.auth.uid) && validMember(d,uid)
+        && d.status == 'connected' && d.createdAt == request.time && d.updatedAt == request.time
+        && memberAvailable(uid) && existsAfter(conn) && getAfter(conn).data.status == 'connected'
+        && getAfter(conn).data.seniorUid == request.auth.uid
+        && existsAfter(invite) && getAfter(invite).data.status == 'used'
+        && getAfter(invite).data.usedBy == request.auth.uid
+        && existsAfter(slot) && getAfter(slot).data.status == 'used'
+        && getAfter(slot).data.inviteCode == d.connectionId;
     }
-
-    match /caregiverInvites/{document=**} {
-      allow read, write: if false;
-    }
-
-    // M3.2: an elderly owner may access only their own medication records.
-    // A profile role from the UI never grants access; the canonical M2.3
-    // `/users/{uid}` document is checked for every operation.
-    match /elderlyProfiles/{uid}/medications/{medicationId} {
-      allow get, list: if hasValidElderlyProfile(uid);
-      allow create: if isValidMedicationCreate(uid);
-      allow update: if isValidMedicationUpdate(uid);
-      allow delete: if false;
-    }
-
-    // M3.3: schedules use the same elderly-owner boundary as medications.
-    // They never grant notification, DoseEvent, or caregiver access.
-    match /elderlyProfiles/{uid}/medicationSchedules/{scheduleId} {
-      allow get, list: if hasValidElderlyProfile(uid);
-      allow create: if isValidMedicationScheduleCreate(uid);
-      allow update: if isValidMedicationScheduleUpdate(uid);
-      allow delete: if false;
-    }
-
-    // M3.4: an elderly owner may create and read exactly one immutable
-    // self-reported response for a real planned occurrence. Client updates,
-    // deletes, notification documents, and caregiver access remain denied.
-    match /elderlyProfiles/{uid}/doseEvents/{doseEventId} {
-      allow get, list: if hasValidElderlyProfile(uid);
-      allow create: if isValidDoseEventCreate(uid, doseEventId);
-      allow update, delete: if false;
-    }
-
-    match /elderlyProfiles/{document=**} {
-      allow read, write: if false;
-    }
-
-    // Explicit default-deny for every future collection and subcollection.
-    match /{document=**} {
-      allow read, write: if false;
-    }
-  }
-})
-        && data.seniorUid == request.auth.uid
-        && data.familyUid != request.auth.uid
-        && hasValidFamilyAccount(data.familyUid)
-        && data.familyDisplayName == get(familyProfilePath).data.displayName
-        && data.seniorDisplayName == get(seniorProfilePath).data.displayName
-        && data.status == 'connected'
-        && data.createdAt == request.time
-        && data.connectedAt == request.time
-        && data.updatedAt == request.time
-        && data.disconnectedAt == null
-        && data.disconnectedBy == null
-        && hasFreeConnectionMember(data.familyUid)
-        && hasFreeConnectionMember(data.seniorUid)
-        && exists(invitePath)
-        && get(invitePath).data.familyUid == data.familyUid
-        && get(invitePath).data.familyDisplayName == data.familyDisplayName
-        && get(invitePath).data.status == 'active'
-        && get(invitePath).data.expiresAt > request.time
-        && exists(slotPath)
-        && get(slotPath).data.inviteCode == code
-        && get(slotPath).data.status == 'active'
-        && get(slotPath).data.expiresAt > request.time
-        && existsAfter(invitePath)
-        && getAfter(invitePath).data.status == 'used'
-        && getAfter(invitePath).data.usedBy == request.auth.uid
-        && getAfter(invitePath).data.connectionId == code
-        && existsAfter(slotPath)
-        && getAfter(slotPath).data.status == 'used'
-        && getAfter(slotPath).data.usedBy == request.auth.uid
-        && getAfter(slotPath).data.connectionId == code
-        && existsAfter(familyMemberPath)
-        && getAfter(familyMemberPath).data.uid == data.familyUid
-        && getAfter(familyMemberPath).data.role == 'family'
-        && getAfter(familyMemberPath).data.counterpartUid == data.seniorUid
-        && getAfter(familyMemberPath).data.counterpartDisplayName == data.seniorDisplayName
-        && getAfter(familyMemberPath).data.connectionId == code
-        && getAfter(familyMemberPath).data.status == 'connected'
-        && existsAfter(seniorMemberPath)
-        && getAfter(seniorMemberPath).data.uid == data.seniorUid
-        && getAfter(seniorMemberPath).data.role == 'senior'
-        && getAfter(seniorMemberPath).data.counterpartUid == data.familyUid
-        && getAfter(seniorMemberPath).data.counterpartDisplayName == data.familyDisplayName
-        && getAfter(seniorMemberPath).data.connectionId == code
-        && getAfter(seniorMemberPath).data.status == 'connected';
-    }
-
-    function isValidConnectedMember(uid, data) {
-      let connectionPath = /databases/$(database)/documents/connections/$(data.connectionId);
-      let invitePath = /databases/$(database)/documents/connectionInvites/$(data.connectionId);
-      let familyUid = data.role == 'family' ? uid : data.counterpartUid;
-      let slotPath = /databases/$(database)/documents/connectionInviteSlots/$(familyUid);
-      return signedIn()
-        && hasValidSeniorAccount(request.auth.uid)
-        && hasValidConnectionMemberSchema(data)
-        && data.uid == uid
-        && data.status == 'connected'
-        && data.createdAt == request.time
-        && data.updatedAt == request.time
-        && hasFreeConnectionMember(uid)
-        && existsAfter(connectionPath)
-        && getAfter(connectionPath).data.status == 'connected'
-        && getAfter(connectionPath).data.seniorUid == request.auth.uid
-        && (
-          (uid == getAfter(connectionPath).data.familyUid
-            && data.role == 'family'
-            && data.counterpartUid == getAfter(connectionPath).data.seniorUid
-            && data.counterpartDisplayName == getAfter(connectionPath).data.seniorDisplayName)
-          || (uid == getAfter(connectionPath).data.seniorUid
-            && data.role == 'senior'
-            && data.counterpartUid == getAfter(connectionPath).data.familyUid
-            && data.counterpartDisplayName == getAfter(connectionPath).data.familyDisplayName)
-        )
-        && existsAfter(invitePath)
-        && getAfter(invitePath).data.status == 'used'
-        && getAfter(invitePath).data.usedBy == request.auth.uid
-        && existsAfter(slotPath)
-        && getAfter(slotPath).data.status == 'used'
-        && getAfter(slotPath).data.inviteCode == data.connectionId;
-    }
-
-    function isValidConnectionDisconnect(code) {
-      let familyMemberPath = /databases/$(database)/documents/connectionMembers/$(resource.data.familyUid);
-      let seniorMemberPath = /databases/$(database)/documents/connectionMembers/$(resource.data.seniorUid);
-      return isConnectionParticipant(resource.data)
-        && resource.data.status == 'connected'
+    function disconnectConnection(code) {
+      let fm = /databases/$(database)/documents/connectionMembers/$(resource.data.familyUid);
+      let sm = /databases/$(database)/documents/connectionMembers/$(resource.data.seniorUid);
+      return connectionParticipant(resource.data) && resource.data.status == 'connected'
         && request.resource.data.status == 'disconnected'
         && request.resource.data.disconnectedAt == request.time
         && request.resource.data.disconnectedBy == request.auth.uid
         && request.resource.data.updatedAt == request.time
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status', 'disconnectedAt', 'disconnectedBy', 'updatedAt'
-        ])
-        && existsAfter(familyMemberPath)
-        && getAfter(familyMemberPath).data.status == 'disconnected'
-        && getAfter(familyMemberPath).data.connectionId == code
-        && existsAfter(seniorMemberPath)
-        && getAfter(seniorMemberPath).data.status == 'disconnected'
-        && getAfter(seniorMemberPath).data.connectionId == code;
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','disconnectedAt','disconnectedBy','updatedAt'])
+        && existsAfter(fm) && getAfter(fm).data.status == 'disconnected'
+        && getAfter(fm).data.connectionId == code
+        && existsAfter(sm) && getAfter(sm).data.status == 'disconnected'
+        && getAfter(sm).data.connectionId == code;
     }
-
-    function isValidConnectionMemberDisconnect(uid) {
-      let connectionPath = /databases/$(database)/documents/connections/$(resource.data.connectionId);
-      return signedIn()
-        && resource.data.status == 'connected'
+    function disconnectMember(uid) {
+      let conn = /databases/$(database)/documents/connections/$(resource.data.connectionId);
+      return signedIn() && resource.data.status == 'connected'
         && request.resource.data.status == 'disconnected'
         && request.resource.data.updatedAt == request.time
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
-        && existsAfter(connectionPath)
-        && getAfter(connectionPath).data.status == 'disconnected'
-        && getAfter(connectionPath).data.disconnectedBy == request.auth.uid
-        && (
-          (uid == getAfter(connectionPath).data.familyUid
-            && resource.data.role == 'family'
-            && resource.data.counterpartUid == getAfter(connectionPath).data.seniorUid)
-          || (uid == getAfter(connectionPath).data.seniorUid
-            && resource.data.role == 'senior'
-            && resource.data.counterpartUid == getAfter(connectionPath).data.familyUid)
-        );
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])
+        && existsAfter(conn) && getAfter(conn).data.status == 'disconnected'
+        && getAfter(conn).data.disconnectedBy == request.auth.uid
+        && ((uid == getAfter(conn).data.familyUid && resource.data.role == 'family' && resource.data.counterpartUid == getAfter(conn).data.seniorUid)
+          || (uid == getAfter(conn).data.seniorUid && resource.data.role == 'senior' && resource.data.counterpartUid == getAfter(conn).data.familyUid));
     }
 
     // Migration 2.3 profile surface. `get` deliberately
@@ -1237,6 +713,43 @@ service cloud.firestore {
 
     match /caregiverInvites/{document=**} {
       allow read, write: if false;
+    }
+
+
+    match /connectionInvites/{code} {
+      allow get: if signedIn() && ((resource.data.familyUid == request.auth.uid && isFamily(request.auth.uid))
+        || (isSenior(request.auth.uid) && resource.data.status == 'active'
+          && exists(/databases/$(database)/documents/connectionInviteSlots/$(resource.data.familyUid))
+          && get(/databases/$(database)/documents/connectionInviteSlots/$(resource.data.familyUid)).data.inviteCode == code));
+      allow list: if false;
+      allow create: if createInvite(code);
+      allow update: if (signedIn() && isFamily(request.auth.uid)
+          && resource.data.familyUid == request.auth.uid && resource.data.status == 'active'
+          && request.resource.data.status == 'revoked' && request.resource.data.updatedAt == request.time
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt']))
+        || useInvite(code);
+      allow delete: if false;
+    }
+    match /connectionInviteSlots/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid && isFamily(uid);
+      allow list: if false;
+      allow create: if createSlot(uid);
+      allow update: if updateSlotFamily(uid) || useSlot(uid);
+      allow delete: if false;
+    }
+    match /connections/{code} {
+      allow get: if connectionParticipant(resource.data);
+      allow list: if false;
+      allow create: if createConnection(code);
+      allow update: if disconnectConnection(code);
+      allow delete: if false;
+    }
+    match /connectionMembers/{uid} {
+      allow get: if signedIn() && request.auth.uid == uid;
+      allow list: if false;
+      allow create: if createMember(uid,request.resource.data);
+      allow update: if createMember(uid,request.resource.data) || disconnectMember(uid);
+      allow delete: if false;
     }
 
     // M3.2: an elderly owner may access only their own medication records.
