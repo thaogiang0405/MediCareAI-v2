@@ -34,3 +34,10 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - Implemented emulator-only Firebase initialization, persistence, registration, login, password reset request, missing-profile recovery, profile edit/logout, protected routes, owner-only rules and test source.
 - Not run: npm install, typecheck, lint, unit tests, rules emulator tests, Expo Doctor, audit, iPhone Phase 02. No PASS claimed.
 - Staging config, provider, schema and deployed rules still require review; no cloud write or deploy. No merge before acceptance.
+
+### Firebase staging decision — 26/11/2026
+- Owner confirms existing project `medicare-ai-cf804` is an old test project and approves reusing it for V2 staging.
+- Added an explicit `staging` initialization path, restricted to project ID `medicare-ai-cf804`; emulator remains the default in `.env.example`.
+- Staging connection is still gated pending read-only review of current Authentication provider/users, Firestore collection/schema, deployed Firestore Rules and billing plan.
+- No existing data, Auth users, Firebase settings, or deployed Rules have been changed or deleted. No Firebase deployment performed.
+- Cleanup requires an inventory and a specific owner-approved deletion list; take/export a backup before deleting records.
