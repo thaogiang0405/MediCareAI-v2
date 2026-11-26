@@ -41,7 +41,7 @@ Kết nối iPhone và Windows cùng Wi-Fi rồi chạy `npx expo start --lan`; 
 
 ## Phase 02 — thử nghiệm Emulator (chưa nghiệm thu)
 
-Firebase project cũ medicare-ai-cf804 được chọn làm staging vì chỉ chứa dữ liệu thử nghiệm theo xác nhận của chủ dự án. Code có chế độ staging riêng nhưng không bật cho đến khi kiểm tra Authentication users, Firestore schema và Rules hiện hành. Không xóa dữ liệu cũ trước khi kiểm kê/sao lưu. Project ID demo-medicare-ai chỉ dùng trên máy local. Không dùng dữ liệu sức khỏe thật, không Blaze, không Storage, không SMS.
+Firebase project cũ medicare-ai-cf804 được chọn làm staging vì chỉ chứa dữ liệu thử nghiệm theo xác nhận của chủ dự án. Rules do chủ dự án cung cấp được lưu làm Rules cho Emulator để kiểm thử; không tự động deploy lại lên Firebase. App chuyển vai trò giao diện `senior/family` sang schema lưu trữ `elderly/caregiver`; email tiếp tục nằm trong Firebase Authentication, không lưu trong hồ sơ Firestore. Không xóa dữ liệu cũ trước khi kiểm kê/sao lưu. Project ID demo-medicare-ai chỉ dùng trên máy local. Không dùng dữ liệu sức khỏe thật, không Blaze, không Storage, không SMS.
 
 Để dùng staging sau khi được duyệt, điền các biến EXPO_PUBLIC_FIREBASE_* trong .env từ Web App config và đặt EXPO_PUBLIC_FIREBASE_MODE=staging. Project ID được kiểm tra bắt buộc phải là medicare-ai-cf804. Không deploy Rules từ repo trước khi so sánh với Rules hiện tại và được chủ dự án chấp thuận.
 
