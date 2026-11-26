@@ -9,6 +9,10 @@ type Context = Session & { refresh: () => Promise<void>; logout: () => Promise<v
 const AuthContext = createContext<Context | null>(null);
 const loading: Session = { status: "loading", user: null, profile: null };
 
+function invalidateGeneration(counter: { current: number }) {
+  counter.current += 1;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session>(() =>
     services
@@ -36,7 +40,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession({ status: "error", user: null, profile: null, message: "Không thể xác minh phiên đăng nhập." });
     });
     return () => {
-      ++generation.current;
+      invalidateGeneration(generation);
       unsubscribe();
     };
   }, [load]);
