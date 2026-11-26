@@ -50,3 +50,14 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - Expanded unit tests for network, disabled-account, permission, rate-limit and unknown Firebase error messages (7/7 passed). Auth Emulator integration test passed (1/1): registration, invalid email, weak password, duplicate email, wrong/correct login, logout and password-reset request. Firestore Rules Emulator tests passed (7/7). Expo Doctor passed (20/20). TypeScript and ESLint passed; latest ESLint run had no warnings.
 - `npm audit --omit=dev` now reports 3 moderate `minimatch` findings under `@expo/fingerprint`; Expo SDK 58's upstream build-tool dependency. The 4 high `@grpc/grpc-js` findings were addressed by pinning the transitive package to 1.14.7. Do not run `npm audit fix --force` or downgrade Expo. The remaining minimatch advisory is documented by Expo maintainers as not affecting production app bundles; it remains visible for review.
 - Latest local-device, Windows CLI and iPhone checks remain unverified. Firebase Auth/Firestore cloud staging has not been smoke-tested. No cloud data write, Rules deployment, billing change, PR creation or merge has occurred.
+
+
+## Phase 03 — Family Connection (in progress)
+- [x] Confirmed Phase 02 merge commit 0e38f65 and created feature/phase-03-family-connection from main.
+- [x] Recovered the original Phase 03 scope: family creates a one-use 8-character code; senior previews the family name and confirms; either participant can disconnect; reconnection uses a new code.
+- [ ] Implement Firestore invite, current-member index and connection-history documents with atomic writes.
+- [ ] Add owner/participant-only Firestore Rules and Emulator integration coverage; do not deploy Rules to the existing Firebase project without explicit approval.
+- [ ] Integrate family and senior connection panels into the existing home screens.
+- [ ] Run TypeScript, ESLint, unit tests, Firestore Rules Emulator tests and Expo Doctor in CI.
+- [ ] Pull to Windows, install SDK 58-compatible Expo modules, and test the full create → connect → disconnect → reconnect flow on iPhone.
+- [ ] Obtain owner acceptance before merging the Pull Request.

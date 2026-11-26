@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { colors } from "@/theme";
+import SeniorConnectionPanel from "@/features/connection/SeniorConnectionPanel";
 
 const features = [
   {
@@ -19,11 +20,6 @@ const features = [
     symbol: "◷",
     title: "Nhắc nhở",
     description: "Lịch chăm sóc mỗi ngày.",
-  },
-  {
-    symbol: "⌂",
-    title: "Người thân",
-    description: "Kết nối cùng gia đình.",
   },
 ];
 
@@ -54,9 +50,11 @@ export default function SeniorHomeScreen() {
           </Text>
         </View>
 
+        <SeniorConnectionPanel />
+
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Tiện ích chăm sóc</Text>
-          <Text style={styles.sectionCaption}>4 tiện ích</Text>
+          <Text style={styles.sectionCaption}>3 tiện ích</Text>
         </View>
 
         <View style={styles.featureGrid}>

@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { colors } from "@/theme";
+import FamilyConnectionPanel from "@/features/connection/FamilyConnectionPanel";
 
 const features = [
   {
@@ -49,17 +50,7 @@ export default function FamilyHomeScreen() {
           </Text>
         </View>
 
-        <View style={styles.statusCard}>
-          <View style={styles.statusIcon}>
-            <Text style={styles.statusSymbol}>♡</Text>
-          </View>
-          <View style={styles.statusCopy}>
-            <Text style={styles.statusTitle}>Chưa kết nối người thân</Text>
-            <Text style={styles.statusDescription}>
-              Tính năng kết nối sẽ được bổ sung ở giai đoạn tiếp theo.
-            </Text>
-          </View>
-        </View>
+        <FamilyConnectionPanel />
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Tiện ích gia đình</Text>

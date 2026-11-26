@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - feature/phase-02-auth
+      - feature/phase-03-family-connection
   pull_request:
     branches:
       - main
