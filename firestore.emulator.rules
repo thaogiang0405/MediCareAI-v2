@@ -658,6 +658,16 @@ service cloud.firestore {
         && d.status == 'connected' && d.createdAt == request.time && d.updatedAt == request.time
         && memberAvailable(uid) && existsAfter(conn) && getAfter(conn).data.status == 'connected'
         && getAfter(conn).data.seniorUid == request.auth.uid
+        && (
+          (uid == getAfter(conn).data.familyUid
+            && d.role == 'family'
+            && d.counterpartUid == getAfter(conn).data.seniorUid
+            && d.counterpartDisplayName == getAfter(conn).data.seniorDisplayName)
+          || (uid == getAfter(conn).data.seniorUid
+            && d.role == 'senior'
+            && d.counterpartUid == getAfter(conn).data.familyUid
+            && d.counterpartDisplayName == getAfter(conn).data.familyDisplayName)
+        )
         && existsAfter(invite) && getAfter(invite).data.status == 'used'
         && getAfter(invite).data.usedBy == request.auth.uid
         && existsAfter(slot) && getAfter(slot).data.status == 'used'
