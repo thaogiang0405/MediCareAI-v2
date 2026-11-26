@@ -1,0 +1,15 @@
+import { useRef, useState } from "react";
+import { Alert, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { colors } from "@/theme";
+import { useRouter } from "expo-router";
+import { useAuth } from "@/features/auth/AuthProvider";
+import { changeName } from "@/features/profile/profile";
+import { validName, authError } from "@/features/auth/validation";
+export default function ProfileScreen(){
+ const {user,profile,refresh,logout}=useAuth();const router=useRouter();const [name,setName]=useState(profile?.fullName??"");const [busy,setBusy]=useState(false);const lock=useRef(false);
+ async function save(){if(lock.current||!user)return;if(!validName(name)){Alert.alert("Hồ sơ","Vui lòng nhập họ tên hợp lệ.");return;}lock.current=true;setBusy(true);try{await changeName(user,name);await refresh();Alert.alert("Hồ sơ","Đã cập nhật họ tên.");}catch(e){Alert.alert("Hồ sơ",authError(e));}finally{lock.current=false;setBusy(false);}}
+ async function exit(){if(lock.current)return;lock.current=true;setBusy(true);try{await logout();}catch(e){Alert.alert("Đăng xuất",authError(e));}finally{lock.current=false;setBusy(false);}}
+ return <SafeAreaView style={s.safe}><KeyboardAvoidingView style={{flex:1}} behavior={Platform.OS==="ios"?"padding":undefined}><ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled"><Text style={s.link} onPress={()=>router.replace(profile?.role==="senior"?"/home/senior":"/home/family")}>‹ Trang chủ</Text><Text style={s.title}>Hồ sơ cá nhân</Text><Text style={s.label}>Họ và tên</Text><TextInput style={s.input} value={name} onChangeText={setName} maxLength={100} editable={!busy}/><Text style={s.label}>Email</Text><Text style={s.desc}>{profile?.email}</Text><Text style={s.label}>Vai trò</Text><Text style={s.desc}>{profile?.role==="senior"?"Người cao tuổi":"Người thân"}</Text><Pressable style={s.button} disabled={busy} onPress={save}><Text style={s.buttonText}>{busy?"Đang xử lý...":"Lưu thay đổi"}</Text></Pressable><Pressable style={s.input} disabled={busy} onPress={exit}><Text style={s.link}>Đăng xuất</Text></Pressable></ScrollView></KeyboardAvoidingView></SafeAreaView>;
+}
+const s=StyleSheet.create({safe:{flex:1,backgroundColor:colors.background},content:{padding:24,gap:16},title:{fontSize:28,fontWeight:"800",color:colors.text},label:{fontSize:16,fontWeight:"700",color:colors.text},input:{minHeight:56,borderWidth:1,borderColor:colors.border,borderRadius:15,padding:16,backgroundColor:colors.surface,color:colors.text,fontSize:16},button:{backgroundColor:colors.primary,minHeight:56,borderRadius:16,justifyContent:"center",alignItems:"center"},buttonText:{color:colors.white,fontSize:18,fontWeight:"800"},link:{color:colors.primary,fontSize:16,fontWeight:"700",paddingVertical:12},desc:{color:colors.muted,fontSize:16,lineHeight:23}});
