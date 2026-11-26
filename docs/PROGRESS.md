@@ -43,3 +43,9 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - Owner reports the remaining Firebase Console checks are complete. The app profile layer has now been aligned with the supplied Firestore Rules; Emulator tests and local app checks must pass before enabling staging. No cloud write or deploy.
 - No existing data, Auth users, Firebase settings, or deployed Rules have been changed or deleted. No Firebase deployment performed.
 - Cleanup requires an inventory and a specific owner-approved deletion list; take/export a backup before deleting records.
+- Follow-up code review: changed the session listener from `onIdTokenChanged` to `onAuthStateChanged` so routine ID-token refreshes do not trigger a full profile reload and temporary route-loading screen.
+- Updated the recovery profile name input limit to match the Firestore Rules maximum of 120 characters.
+- Populated `.env.example` with the existing Firebase Web App client configuration supplied by the owner. Emulator remains the default; `.env` remains ignored by Git.
+- Added GitHub Actions quality workflow for TypeScript, ESLint, unit tests, Firestore Rules Emulator tests, Expo Doctor and a production dependency audit. The first current run is pending; no check is reported as passing until its result is read.
+- Expanded unit tests for network, disabled-account, permission, rate-limit and unknown Firebase error messages.
+- Latest local-device, Windows CLI and iPhone checks remain unverified. No cloud data write, Rules deployment, billing change, PR creation or merge has occurred.
