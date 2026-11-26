@@ -9,8 +9,16 @@ type Context = Session & { refresh: () => Promise<void>; logout: () => Promise<v
 const AuthContext = createContext<Context | null>(null);
 const loading: Session = { status: "loading", user: null, profile: null };
 
+function invalidateGeneration(counter: { current: number }) {
+  counter.current += 1;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session>(loading);
+  const [session, setSession] = useState<Session>(() =>
+    services
+      ? loading
+      : { status: "error", user: null, profile: null, message: firebaseError ?? undefined },
+  );
   const generation = useRef(0);
   async function load(user: User | null, preserve = false) {
     const ticket = ++generation.current;
@@ -26,15 +34,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
   useEffect(() => {
-    if (!services) {
-      setSession({ status: "error", user: null, profile: null, message: firebaseError ?? undefined });
-      return;
-    }
+    if (!services) return;
     const unsubscribe = onIdTokenChanged(services.auth, user => { void load(user); }, () => {
       ++generation.current;
       setSession({ status: "error", user: null, profile: null, message: "Không thể xác minh phiên đăng nhập." });
     });
-    return () => { ++generation.current; unsubscribe(); };
+    return () => {
+      invalidateGeneration(generation);
+      unsubscribe();
+    };
   }, []);
   async function refresh() {
     if (services) await load(services.auth.currentUser, session.status === "ready" && session.user?.uid === services.auth.currentUser?.uid);
