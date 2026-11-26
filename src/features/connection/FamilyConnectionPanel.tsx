@@ -27,37 +27,41 @@ export default function FamilyConnectionPanel() {
   const [connection, setConnection] = useState<ConnectionRecord | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [now, setNow] = useState(0);
 
   useEffect(() => {
     if (!user || !profile || profile.role !== "family") return;
     return watchConnectionMember(user.uid, value => {
       setMember(value);
+      if (!value || value.status !== "connected") setConnection(null);
       setMemberLoaded(true);
     }, error => setMessage(connectionErrorMessage(error)));
-  }, [user?.uid, profile?.role]);
+  }, [user, profile]);
 
   useEffect(() => {
     if (!user || !profile || profile.role !== "family") return;
     return watchConnectionInviteSlot(user.uid, setSlot, error => {
       setMessage(connectionErrorMessage(error));
     });
-  }, [user?.uid, profile?.role]);
+  }, [user, profile]);
 
   useEffect(() => {
-    if (!member || member.status !== "connected") {
-      setConnection(null);
-      return;
-    }
+    if (!member || member.status !== "connected") return;
     return watchConnection(member.connectionId, setConnection, error => {
       setMessage(connectionErrorMessage(error));
     });
-  }, [member?.connectionId, member?.status]);
+  }, [member]);
+
+  useEffect(() => {
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   if (!user || !profile || profile.role !== "family") return null;
 
   const connected = member?.status === "connected";
-  const inviteActive = slot?.status === "active" && slot.expiresAt.toMillis() > Date.now();
-  const inviteExpired = slot?.status === "active" && slot.expiresAt.toMillis() <= Date.now();
+  const inviteActive = slot?.status === "active" && slot.expiresAt.toMillis() > now;
+  const inviteExpired = slot?.status === "active" && slot.expiresAt.toMillis() <= now;
 
   async function createCode() {
     if (busy || !user || !profile) return;
