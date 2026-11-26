@@ -40,6 +40,6 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 ### Firebase staging decision — 26/11/2026
 - Owner confirms existing project `medicare-ai-cf804` is an old test project and approves reusing it for V2 staging.
 - Added an explicit `staging` initialization path, restricted to project ID `medicare-ai-cf804`; emulator remains the default in `.env.example`.
-- Staging connection is still gated pending read-only review of current Authentication provider/users, Firestore collection/schema, deployed Firestore Rules and billing plan.
+- Owner reports the remaining Firebase Console checks are complete. The app profile layer has now been aligned with the supplied Firestore Rules; Emulator tests and local app checks must pass before enabling staging. No cloud write or deploy.
 - No existing data, Auth users, Firebase settings, or deployed Rules have been changed or deleted. No Firebase deployment performed.
 - Cleanup requires an inventory and a specific owner-approved deletion list; take/export a backup before deleting records.
