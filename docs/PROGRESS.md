@@ -14,7 +14,7 @@ Cập nhật: 26/11/2026
 - [ ] Đồng bộ source mới về Windows và cài dependency.
 - [ ] Chạy TypeScript, ESLint và Expo Doctor trên máy Windows.
 - [ ] Kiểm thử iPhone thật: lề màn hình, Safe Area, bàn phím, Dynamic Island và Home Indicator.
-- [ ] Nhận Firebase Web App config của project cũ; chưa bật Auth hoặc truy cập dữ liệu.
+- [x] Đã nhận Firebase Web App config của project cũ `medicare-ai-cf804`; chưa bật Auth hoặc truy cập dữ liệu cloud.
 
 ## Ghi chú kiểm thử
 
@@ -31,9 +31,9 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 ## Phase 02 — Authentication (in progress, not accepted)
 - Owner reports Phase 01 UI accepted on physical iPhone on 26/11/2026; technical test logs not independently verified.
 - Feature branch: feature/phase-02-auth, based on ecb72322bafa0839d0e2272d62c9f21f5942ffda.
-- Implemented emulator-only Firebase initialization, persistence, registration, login, password reset request, missing-profile recovery, profile edit/logout, protected routes, owner-only rules and test source.
+- Implemented Firebase initialization with Emulator default and a separately gated staging mode, persistence, registration, login, password reset request, missing-profile recovery, profile edit/logout, protected routes, emulator-only owner-scoped Rules and test source.
 - Not run: npm install, typecheck, lint, unit tests, rules emulator tests, Expo Doctor, audit, iPhone Phase 02. No PASS claimed.
-- Staging config, provider, schema and deployed rules still require review; no cloud write or deploy. No merge before acceptance.
+- Staging config values received, but provider, schema, current deployed rules and billing plan still require review; no cloud write or deploy. No merge before acceptance.
 
 ### Firebase staging decision — 26/11/2026
 - Owner confirms existing project `medicare-ai-cf804` is an old test project and approves reusing it for V2 staging.
