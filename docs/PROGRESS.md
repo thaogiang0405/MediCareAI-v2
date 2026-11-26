@@ -33,7 +33,9 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - Feature branch: feature/phase-02-auth, based on ecb72322bafa0839d0e2272d62c9f21f5942ffda.
 - Implemented Firebase initialization with Emulator default and a separately gated staging mode, persistence, registration, login, password reset request, missing-profile recovery, profile edit/logout, protected routes, emulator-only owner-scoped Rules and test source.
 - Not run: npm install, typecheck, lint, unit tests, rules emulator tests, Expo Doctor, audit, iPhone Phase 02. No PASS claimed.
-- Staging config values received, but provider, schema, current deployed rules and billing plan still require review; no cloud write or deploy. No merge before acceptance.
+- Owner shared the current Firestore Rules and Spark billing screenshot: Spark / No cost; 23 reads, 0 writes, 0 deletes shown.
+- The current Firestore Rules were copied into the local Emulator rules file only (not deployed). The app profile data layer now maps UI roles `senior/family` to persisted roles `elderly/caregiver` and uses the exact `users/{uid}` schema.
+- Authentication provider/users and existing Firestore documents are treated as reviewed by the owner; the app still needs to be tested against the Emulator before any staging connection. No cloud write, delete, Rules deployment, or billing change has been performed.
 
 ### Firebase staging decision — 26/11/2026
 - Owner confirms existing project `medicare-ai-cf804` is an old test project and approves reusing it for V2 staging.
