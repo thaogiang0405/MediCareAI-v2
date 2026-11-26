@@ -12,9 +12,9 @@ const loading: Session = { status: "loading", user: null, profile: null };
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session>(loading);
   const generation = useRef(0);
-  async function load(user: User | null) {
+  async function load(user: User | null, preserve = false) {
     const ticket = ++generation.current;
-    setSession({ status: user ? "loading" : "guest", user, profile: null });
+    if (!preserve) setSession({ status: user ? "loading" : "guest", user, profile: null });
     if (!user) return;
     try {
       const profile = await readProfile(user);
@@ -37,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { ++generation.current; unsubscribe(); };
   }, []);
   async function refresh() {
-    if (services) await load(services.auth.currentUser);
+    if (services) await load(services.auth.currentUser, session.status === "ready" && session.user?.uid === services.auth.currentUser?.uid);
   }
   async function logout() {
     if (!services) return;
