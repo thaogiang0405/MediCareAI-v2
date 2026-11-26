@@ -39,15 +39,40 @@ Nếu npm báo ERESOLVE hoặc Expo báo phiên bản lệch, dừng và gửi n
 ## iPhone / Expo Go
 Kết nối iPhone và Windows cùng Wi-Fi rồi chạy `npx expo start --lan`; quét QR bằng Camera hoặc Expo Go. Nếu LAN lỗi, Ctrl+C rồi chạy `npx expo start --tunnel`. Không cần Xcode hay iOS Simulator trên Windows. Cần xác nhận bản Expo Go đang cài hỗ trợ SDK 58; nếu không, chọn Expo Go tương thích trên App Store hoặc EAS Development Build. Không giả định có thể build iOS native trực tiếp trên Windows.
 
-## Firebase
-Chỉ giữ Firebase project hiện tại. Sao chép `.env.example` thành `.env` và điền Firebase Web App config sau khi đối chiếu project. Chưa bật Authentication, chưa đọc/ghi Firestore. Không commit .env, service account hoặc private key; không đổi Security Rules, xóa dữ liệu hoặc deploy Functions.
+## Phase 02 — thử nghiệm Emulator (chưa nghiệm thu)
 
-## Routes
-- `/` chào mừng
-- `/auth/login` đăng nhập (chưa xác thực)
-- `/auth/register` đăng ký (chưa tạo tài khoản)
-- `/role-select` chọn giao diện xem trước
-- `/home/senior` và `/home/family` dashboard mẫu
+Không kết nối cloud cho đến khi xác minh staging, schema, Auth provider và Rules hiện hành. Project ID demo-medicare-ai chỉ dùng trên máy local. Không dùng dữ liệu thật, không Blaze, không Storage, không SMS.
 
-## Docs
-Xem `AGENTS.md`, `docs/PROJECT_SCOPE.md`, `docs/PROGRESS.md`. Kiểm thử Windows/iPhone chưa được thực hiện trong phiên ChatGPT; chỉ đánh dấu đạt sau khi chạy thực tế.
+Windows CMD (chỉ chuyển nhánh khi git status sạch):
+```cmd
+git fetch origin
+git switch --track origin/feature/phase-02-auth
+npm install
+npx expo install @react-native-async-storage/async-storage
+copy .env.example .env
+ipconfig
+notepad .env
+```
+Đặt EXPO_PUBLIC_FIREBASE_MODE=emulator và EXPO_PUBLIC_FIREBASE_EMULATOR_HOST bằng IPv4 LAN của máy Windows. Chỉ dùng Wi-Fi riêng tin cậy, không mở port ra Internet. Cài Java JDK 21 nếu thiếu. CMD 1:
+```cmd
+npx firebase-tools emulators:start --config firebase.emulator.json --project demo-medicare-ai --only auth,firestore
+```
+CMD 2:
+```cmd
+npx expo start --lan --clear
+```
+Mở Expo Go SDK 58 trên iPhone cùng Wi-Fi. Emulator UI: http://localhost:4000. Password reset Emulator in link ra terminal, không gửi email thật. Giữ emulator chạy khi thử đóng/mở app. Không dùng firebase deploy. Rules test sẽ xóa dữ liệu Firestore giả lập nên dừng emulator đang dùng trước khi chạy.
+
+```cmd
+npm run typecheck
+npm run lint
+npm test
+npm run test:rules
+npx expo-doctor
+npm audit --omit=dev
+```
+Chưa chạy các lệnh trên trong môi trường thực thi. Sau npm install kiểm tra và commit package-lock.json trên feature branch. Không dùng audit fix --force. Kiểm tra Expo SDK tương thích AsyncStorage.
+
+Routes: /auth/login, /auth/register, /role-select, /auth/forgot, /auth/complete-profile, /home/senior, /home/family, /profile. Protected Stack dùng trạng thái Auth và role từ server. Chưa nghiệm thu iPhone; PR không merge trước khi owner xác nhận.
+
+Docs: AGENTS.md, docs/PROJECT_SCOPE.md, docs/PROGRESS.md.
