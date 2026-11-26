@@ -3,11 +3,12 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, Button, Text, View } from "react-native";
 import { AuthProvider, useAuth } from "@/features/auth/AuthProvider";
+import { services } from "@/lib/firebase";
 
 function Routes() {
   const session = useAuth();
   if (session.status === "loading") return <View style={{flex:1,justifyContent:"center",alignItems:"center"}}><ActivityIndicator size="large"/><Text>Đang kiểm tra tài khoản...</Text></View>;
-  if (session.status === "error") return <View style={{flex:1,justifyContent:"center",padding:24,gap:16}}><Text>{session.message}</Text><Button title="Thử lại" onPress={()=>void session.refresh()}/>{session.user && <Button title="Đăng xuất" onPress={()=>void session.logout().catch(()=>{})}/>}</View>;
+  if (session.status === "error") return <View style={{flex:1,justifyContent:"center",padding:24,gap:16}}><Text>{session.message}</Text>{services && <Button title="Thử lại" onPress={()=>void session.refresh()}/>} {session.user && <Button title="Đăng xuất" onPress={()=>void session.logout().catch(()=>{})}/>}</View>;
   return <Stack screenOptions={{headerShown:false}}>
     <Stack.Protected guard={session.status === "guest"}>
       <Stack.Screen name="auth/login"/>
