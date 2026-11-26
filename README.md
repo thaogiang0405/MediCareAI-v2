@@ -69,11 +69,12 @@ Mở Expo Go SDK 58 trên iPhone cùng Wi-Fi. Emulator UI: http://localhost:4000
 npm run typecheck
 npm run lint
 npm test
+npm run test:auth
 npm run test:rules
 npx expo-doctor
 npm audit --omit=dev
 ```
-Chưa chạy các lệnh trên trong môi trường thực thi. Sau npm install kiểm tra và commit package-lock.json trên feature branch. Không dùng audit fix --force. Kiểm tra Expo SDK tương thích AsyncStorage.
+GitHub Actions đã chạy thành công trên feature branch: TypeScript, ESLint, unit tests (7/7), Firebase Auth Emulator (1/1), Firestore Rules Emulator (7/7) và Expo Doctor (20/20). Đây là kiểm thử CI, không thay thế kiểm thử Windows/iPhone. `npm audit --omit=dev` còn 3 cảnh báo moderate của `minimatch` nằm trong công cụ build `@expo/fingerprint` của Expo SDK 58; không dùng `npm audit fix --force` hoặc hạ Expo SDK. Đã ghim `@grpc/grpc-js` ở bản đã vá 1.14.7. Sau khi đồng bộ về Windows, giữ và cập nhật `package-lock.json`, rồi commit lockfile trên feature branch.
 
 Routes: /auth/login, /auth/register, /role-select, /auth/forgot, /auth/complete-profile, /home/senior, /home/family, /profile. Protected Stack dùng trạng thái Auth và role từ server. Chưa nghiệm thu iPhone; PR không merge trước khi owner xác nhận.
 
