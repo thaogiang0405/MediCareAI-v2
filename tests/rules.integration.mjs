@@ -1,0 +1,16 @@
+import { before, after, beforeEach, test } from "node:test";
+import { readFileSync } from "node:fs";
+import { initializeTestEnvironment, assertSucceeds, assertFails } from "@firebase/rules-unit-testing";
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, serverTimestamp, collection, getDocs } from "firebase/firestore";
+let env;
+before(async()=>{env=await initializeTestEnvironment({projectId:"demo-medicare-ai",firestore:{rules:readFileSync("firestore.emulator.rules","utf8")}});});
+after(async()=>{await env?.cleanup();});
+beforeEach(async()=>{await env.clearFirestore();});
+const db=(uid)=>env.authenticatedContext(uid,{email:uid+"@example.com"}).firestore();
+const data=(uid,role="senior")=>({uid,email:uid+"@example.com",fullName:"Nguyễn Văn An",role,createdAt:serverTimestamp(),updatedAt:serverTimestamp()});
+const ref=(d,uid)=>doc(d,"users",uid);
+test("owner creates senior and family",async()=>{for(const [uid,role] of [["a","senior"],["b","family"]]){await assertSucceeds(setDoc(ref(db(uid),uid),data(uid,role)));await assertSucceeds(getDoc(ref(db(uid),uid)));}});
+test("anonymous denied",async()=>{const d=env.unauthenticatedContext().firestore();await assertFails(getDoc(ref(d,"a")));await assertFails(setDoc(ref(d,"a"),data("a")));});
+test("cross-account denied",async()=>{await assertSucceeds(setDoc(ref(db("a"),"a"),data("a")));await assertFails(getDoc(ref(db("b"),"a")));await assertFails(updateDoc(ref(db("b"),"a"),{fullName:"Other",updatedAt:serverTimestamp()}));await assertFails(setDoc(ref(db("b"),"c"),data("c")));});
+test("invalid role and extra field denied",async()=>{const d=db("a");await assertFails(setDoc(ref(d,"a"),data("a","admin")));await assertFails(setDoc(ref(d,"a"),{...data("a"),password:"not-allowed"}));await assertFails(setDoc(ref(d,"a"),{...data("a"),email:"wrong@example.com"}));});
+test("only name and timestamp editable",async()=>{const d=db("a"),p=ref(d,"a");await assertSucceeds(setDoc(p,data("a")));await assertSucceeds(updateDoc(p,{fullName:"Tên mới",updatedAt:serverTimestamp()}));for(const x of [{uid:"b"},{role:"family"},{email:"other@example.com"},{createdAt:serverTimestamp()},{fullName:""},{extra:true}])await assertFails(updateDoc(p,{...x,updatedAt:serverTimestamp()}));await assertFails(deleteDoc(p));await assertFails(getDocs(collection(d,"users")));});
