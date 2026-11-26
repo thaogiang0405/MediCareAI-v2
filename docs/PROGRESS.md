@@ -27,3 +27,10 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 3. Mở ứng dụng trên iPhone bằng Expo Go SDK 58.
 4. Chụp lại màn hình đăng nhập, đăng ký và hai trang chủ để rà soát kích thước thực tế.
 5. Sau khi giao diện ổn định, chuẩn bị tích hợp Firebase Authentication bằng Firebase project hiện tại.
+
+## Phase 02 — Authentication (in progress, not accepted)
+- Owner reports Phase 01 UI accepted on physical iPhone on 26/11/2026; technical test logs not independently verified.
+- Feature branch: feature/phase-02-auth, based on ecb72322bafa0839d0e2272d62c9f21f5942ffda.
+- Implemented emulator-only Firebase initialization, persistence, registration, login, password reset request, missing-profile recovery, profile edit/logout, protected routes, owner-only rules and test source.
+- Not run: npm install, typecheck, lint, unit tests, rules emulator tests, Expo Doctor, audit, iPhone Phase 02. No PASS claimed.
+- Staging config, provider, schema and deployed rules still require review; no cloud write or deploy. No merge before acceptance.
