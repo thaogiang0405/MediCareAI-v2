@@ -2,12 +2,12 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { initializeApp, deleteApp } from "firebase/app";
 import {
+  getAuth,
   connectAuthEmulator,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
-  type Auth,
 } from "firebase/auth";
 
 const app = initializeApp({
@@ -17,7 +17,7 @@ const app = initializeApp({
   appId: "1:123:web:demo",
 }, "phase02-auth-emulator-tests");
 
-const auth = (await import("firebase/auth")).getAuth(app);
+const auth = getAuth(app);
 connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
 
 after(async () => {
