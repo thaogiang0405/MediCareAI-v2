@@ -55,9 +55,11 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 ## Phase 03 — Family Connection (in progress)
 - [x] Confirmed Phase 02 merge commit 0e38f65 and created feature/phase-03-family-connection from main.
 - [x] Recovered the original Phase 03 scope: family creates a one-use 8-character code; senior previews the family name and confirms; either participant can disconnect; reconnection uses a new code.
-- [ ] Implement Firestore invite, current-member index and connection-history documents with atomic writes.
-- [ ] Add owner/participant-only Firestore Rules and Emulator integration coverage; do not deploy Rules to the existing Firebase project without explicit approval.
-- [ ] Integrate family and senior connection panels into the existing home screens.
-- [ ] Run TypeScript, ESLint, unit tests, Firestore Rules Emulator tests and Expo Doctor in CI.
+- [x] Implement one-use 8-character invites, 15-minute expiry, current-member indexes and immutable connection-history documents with atomic writes.
+- [x] Integrate family and senior connection panels into the existing home screens, including name preview and explicit senior confirmation.
+- [x] Add owner/participant-only Firestore Rules. CI passed TypeScript, ESLint, unit tests, Auth Emulator, Firestore Rules Emulator and Expo Doctor on commit bbe7a09.
+- [x] Add a security invariant so a senior can create member-index records only for the exact family/senior participants in the connection.
+- [ ] Expand Firestore Rules Emulator tests for invite creation/use, unauthorized reads, cross-account member-index writes, disconnect and reconnect.
 - [ ] Pull to Windows, install SDK 58-compatible Expo modules, and test the full create → connect → disconnect → reconnect flow on iPhone.
 - [ ] Obtain owner acceptance before merging the Pull Request.
+- No Firestore Rules have been deployed to the existing Firebase project; the PR remains draft pending additional security tests and iPhone acceptance.
