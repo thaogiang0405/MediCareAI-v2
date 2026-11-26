@@ -1,6 +1,6 @@
 export type Role = "senior" | "family";
 export const isRole = (value: unknown): value is Role => value === "senior" || value === "family";
-export const validEmail = (value: string) => /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(value.trim());
+export const validEmail = (value: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 // Match the existing Firestore Rules: 2–120 characters after trimming.
 export const validName = (value: string) => value.trim().length >= 2 && value.trim().length <= 120;
 export function authError(error: unknown): string {
