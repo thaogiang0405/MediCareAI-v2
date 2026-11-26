@@ -1,0 +1,27 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      function owner() {
+        return request.auth != null && request.auth.uid == uid;
+      }
+      function valid(d) {
+        return d.keys().hasAll(['uid','fullName','email','role','createdAt','updatedAt'])
+          && d.keys().hasOnly(['uid','fullName','email','role','createdAt','updatedAt'])
+          && d.uid == uid && d.fullName is string && d.fullName.size() > 0
+          && d.fullName.size() <= 100 && d.fullName.matches('.*[^ ].*')
+          && d.email is string && d.email == request.auth.token.email
+          && d.role in ['senior','family']
+          && d.createdAt is timestamp && d.updatedAt is timestamp;
+      }
+      allow get: if owner();
+      allow create: if owner() && valid(request.resource.data)
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time;
+      allow update: if owner() && valid(request.resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fullName','updatedAt'])
+        && request.resource.data.updatedAt == request.time;
+      allow list, delete: if false;
+    }
+  }
+}
