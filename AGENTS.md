@@ -8,3 +8,6 @@
 - Keep .env, service accounts and private keys out of Git.
 - Inspect Git status and preserve existing local files before changes. Never force-push.
 - Run typecheck, lint and Expo Doctor; distinguish actual tests from unrun device tests.
+- Every phase uses a feature branch; PR only, no merge before owner iPhone acceptance.
+- Budget zero: Spark, Email/Password, Firestore and Emulator only; no Blaze, SMS, Storage or paid Apple builds.
+- Phase 02 is emulator-only until existing Firebase staging and rules are reviewed and owner approves deployment.
