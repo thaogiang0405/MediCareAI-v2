@@ -1,3 +1,231 @@
-import {useState} from "react";import {Alert,SafeAreaView,Text,TextInput,StyleSheet} from "react-native";import {useRouter} from "expo-router";import {colors} from "@/theme";
-export default function Register(){const r=useRouter();const [name,setName]=useState("");const [email,setEmail]=useState("");const [password,setPassword]=useState("");return <SafeAreaView style={s.page}><Text onPress={()=>r.back()} style={s.back}>‹ Quay lại</Text><Text style={s.title}>Tạo tài khoản</Text><Text style={s.label}>Họ và tên</Text><TextInput style={s.input} value={name} onChangeText={setName} placeholder="Nguyễn Văn An"/><Text style={s.label}>Email</Text><TextInput style={s.input} value={email} onChangeText={setEmail} placeholder="example@email.com" keyboardType="email-address" autoCapitalize="none"/><Text style={s.label}>Mật khẩu</Text><TextInput style={s.input} value={password} onChangeText={setPassword} placeholder="Nhập mật khẩu" secureTextEntry/><Text onPress={()=>Alert.alert("Chưa kết nối Firebase","Chưa tạo tài khoản. Firebase Authentication chưa được bật.")} style={s.button}>Tạo tài khoản</Text><Text onPress={()=>r.push("/auth/login")} style={s.link}>Đã có tài khoản? Đăng nhập</Text></SafeAreaView>}
-const s=StyleSheet.create({page:{flex:1,backgroundColor:colors.background,padding:24,gap:16},back:{color:colors.primary,fontSize:17},title:{fontSize:28,fontWeight:"800",color:colors.text,marginVertical:20},label:{fontWeight:"700",color:colors.text},input:{backgroundColor:"white",borderColor:colors.border,borderWidth:1,borderRadius:14,padding:17,fontSize:16},button:{backgroundColor:colors.primary,color:"white",textAlign:"center",padding:18,borderRadius:14,fontWeight:"800",overflow:"hidden",marginTop:12},link:{color:colors.primary,textAlign:"center",fontWeight:"700"}});
+import { useState } from "react";
+import {
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
+import { useRouter } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { colors } from "@/theme";
+
+export default function RegisterScreen() {
+  const router = useRouter();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+
+  const handleRegister = () => {
+    Alert.alert(
+      "Chưa kết nối Firebase",
+      "Chưa tạo tài khoản. Firebase Authentication sẽ được tích hợp ở giai đoạn tiếp theo."
+    );
+  };
+
+  return (
+    <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+      >
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Quay lại"
+            onPress={() => router.back()}
+            hitSlop={8}
+            style={styles.backButton}
+          >
+            <Text style={styles.backText}>‹  Quay lại</Text>
+          </Pressable>
+
+          <View style={styles.headingGroup}>
+            <Text style={styles.title}>Tạo tài khoản</Text>
+            <Text style={styles.description}>
+              Điền thông tin cơ bản để bắt đầu sử dụng MediCare AI.
+            </Text>
+          </View>
+
+          <View style={styles.form}>
+            <View style={styles.field}>
+              <Text style={styles.label}>Họ và tên</Text>
+              <TextInput
+                style={styles.input}
+                value={name}
+                onChangeText={setName}
+                placeholder="Nguyễn Văn An"
+                placeholderTextColor="#98A8AD"
+                textContentType="name"
+                autoCapitalize="words"
+                returnKeyType="next"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Email</Text>
+              <TextInput
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                placeholder="example@email.com"
+                placeholderTextColor="#98A8AD"
+                keyboardType="email-address"
+                textContentType="emailAddress"
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="next"
+              />
+            </View>
+
+            <View style={styles.field}>
+              <Text style={styles.label}>Mật khẩu</Text>
+              <TextInput
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Nhập mật khẩu"
+                placeholderTextColor="#98A8AD"
+                secureTextEntry
+                textContentType="newPassword"
+                returnKeyType="done"
+              />
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={handleRegister}
+              style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.primaryButtonText}>Tạo tài khoản</Text>
+            </Pressable>
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.push("/auth/login")}
+            style={styles.linkButton}
+          >
+            <Text style={styles.linkText}>Đã có tài khoản? Đăng nhập</Text>
+          </Pressable>
+
+          <Text style={styles.notice}>
+            Thông tin hiện chưa được gửi hoặc lưu vào Firebase.
+          </Text>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: colors.background,
+  },
+  flex: {
+    flex: 1,
+  },
+  content: {
+    flexGrow: 1,
+    width: "100%",
+    maxWidth: 560,
+    alignSelf: "center",
+    paddingHorizontal: 24,
+    paddingTop: 14,
+    paddingBottom: 28,
+    gap: 20,
+  },
+  backButton: {
+    alignSelf: "flex-start",
+    justifyContent: "center",
+    minHeight: 42,
+    paddingRight: 12,
+  },
+  backText: {
+    color: colors.primary,
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  headingGroup: {
+    gap: 6,
+    marginTop: 2,
+  },
+  title: {
+    color: colors.text,
+    fontSize: 28,
+    lineHeight: 36,
+    fontWeight: "800",
+  },
+  description: {
+    color: colors.muted,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  form: {
+    gap: 16,
+  },
+  field: {
+    gap: 8,
+  },
+  label: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  input: {
+    width: "100%",
+    minHeight: 56,
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: 1,
+    borderRadius: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    color: colors.text,
+    fontSize: 16,
+  },
+  primaryButton: {
+    minHeight: 56,
+    borderRadius: 16,
+    backgroundColor: colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  primaryButtonText: {
+    color: colors.white,
+    fontSize: 18,
+    fontWeight: "800",
+  },
+  pressed: {
+    opacity: 0.82,
+  },
+  linkButton: {
+    alignSelf: "center",
+    justifyContent: "center",
+    minHeight: 44,
+    paddingHorizontal: 8,
+  },
+  linkText: {
+    color: colors.primary,
+    fontSize: 15,
+    fontWeight: "700",
+    textAlign: "center",
+  },
+  notice: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
+    textAlign: "center",
+    marginTop: "auto",
+  },
+});
