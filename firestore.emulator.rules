@@ -636,7 +636,8 @@ service cloud.firestore {
         && d.seniorDisplayName == get(/databases/$(database)/documents/users/$(d.seniorUid)).data.displayName
         && d.status == 'connected' && d.createdAt == request.time && d.connectedAt == request.time
         && d.updatedAt == request.time && d.disconnectedAt == null && d.disconnectedBy == null
-        && memberAvailable(d.familyUid) && memberAvailable(d.seniorUid)
+        // Availability is enforced by both connectionMembers writes. Avoid
+        // duplicate reads here so reconnect transactions stay within Rules limits.
         && exists(invite) && get(invite).data.familyUid == d.familyUid
         && get(invite).data.status == 'active' && get(invite).data.expiresAt > request.time
         && exists(slot) && get(slot).data.inviteCode == code && get(slot).data.status == 'active'
