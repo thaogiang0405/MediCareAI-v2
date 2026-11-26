@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -12,6 +12,9 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { signInWithEmailAndPassword } from "firebase/auth";
+import { services } from "@/lib/firebase";
+import { authError, validEmail } from "@/features/auth/validation";
 import { colors } from "@/theme";
 
 export default function LoginScreen() {
@@ -19,11 +22,17 @@ export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleLogin = () => {
-    Alert.alert(
-      "Chưa kết nối Firebase",
-      "Chưa xác thực tài khoản. Firebase Authentication sẽ được tích hợp ở giai đoạn tiếp theo."
-    );
+  const [busy,setBusy] = useState(false);
+  const [show,setShow] = useState(false);
+  const lock = useRef(false);
+  const handleLogin = async () => {
+    if (lock.current) return;
+    if (!validEmail(email) || !password) { Alert.alert("Kiểm tra thông tin","Vui lòng nhập email hợp lệ và mật khẩu."); return; }
+    if (!services) return;
+    lock.current = true; setBusy(true);
+    try { await signInWithEmailAndPassword(services.auth,email.trim(),password); }
+    catch(e) { Alert.alert("Đăng nhập",authError(e)); }
+    finally { lock.current=false; setBusy(false); }
   };
 
   return (
@@ -77,26 +86,28 @@ export default function LoginScreen() {
                 onChangeText={setPassword}
                 placeholder="Nhập mật khẩu"
                 placeholderTextColor="#98A8AD"
-                secureTextEntry
+                secureTextEntry={!show}
                 textContentType="password"
                 returnKeyType="done"
                 onSubmitEditing={handleLogin}
               />
             </View>
 
+            <Text onPress={()=>setShow(v=>!v)} style={styles.linkText}>{show?"Ẩn mật khẩu":"Hiện mật khẩu"}</Text>
             <Pressable
+              disabled={busy}
               accessibilityRole="button"
               onPress={handleLogin}
               style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
             >
-              <Text style={styles.primaryButtonText}>Đăng nhập</Text>
+              <Text style={styles.primaryButtonText}>{busy?"Đang đăng nhập...":"Đăng nhập"}</Text>
             </Pressable>
           </View>
 
           <View style={styles.links}>
             <Pressable
               accessibilityRole="button"
-              onPress={() => router.push("/auth/register")}
+              onPress={() => router.push("/role-select")}
               style={styles.linkButton}
             >
               <Text style={styles.linkText}>Chưa có tài khoản? Đăng ký ngay</Text>
@@ -104,15 +115,15 @@ export default function LoginScreen() {
 
             <Pressable
               accessibilityRole="button"
-              onPress={() => router.push("/role-select")}
+              onPress={() => router.push("/auth/forgot")}
               style={styles.linkButton}
             >
-              <Text style={styles.secondaryLinkText}>Xem trước giao diện</Text>
+              <Text style={styles.secondaryLinkText}>Quên mật khẩu?</Text>
             </Pressable>
           </View>
 
           <Text style={styles.notice}>
-            Đây là giao diện xem trước. Chưa có tài khoản nào được xác thực.
+            Chỉ sử dụng tài khoản kiểm thử trong môi trường Emulator.
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
