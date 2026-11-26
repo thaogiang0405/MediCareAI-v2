@@ -15,7 +15,7 @@ const mode = process.env.EXPO_PUBLIC_FIREBASE_MODE as Mode | undefined;
 const host = process.env.EXPO_PUBLIC_FIREBASE_EMULATOR_HOST?.trim() ?? "";
 const EXPECTED_STAGING_PROJECT_ID = "medicare-ai-cf804";
 
-const localHost = /^(localhost|127\\.0\\.0\\.1|10\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|192\\.168\\.\\d{1,3}\\.\\d{1,3}|172\\.(1[6-9]|2\\d|3[01])\\.\\d{1,3}\\.\\d{1,3})$/.test(host);
+const localHost = /^(localhost|127\.0\.0\.1|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3})$/.test(host);
 
 function createAuth(app: ReturnType<typeof initializeApp>): Auth {
   // Metro resolves firebase/auth's React Native entry on iOS/Android.
