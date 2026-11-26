@@ -59,7 +59,8 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - [x] Integrate family and senior connection panels into the existing home screens, including name preview and explicit senior confirmation.
 - [x] Add owner/participant-only Firestore Rules. CI passed TypeScript, ESLint, unit tests, Auth Emulator, Firestore Rules Emulator and Expo Doctor on commit bbe7a09.
 - [x] Add a security invariant so a senior can create member-index records only for the exact family/senior participants in the connection.
-- [ ] Expand Firestore Rules Emulator tests for invite creation/use, unauthorized reads, cross-account member-index writes, disconnect and reconnect.
+- [x] Expand Firestore Rules Emulator tests for invite creation/use, unauthorized reads, cross-account member-index writes, disconnect and reconnect (12/12 passed).
 - [ ] Pull to Windows, install SDK 58-compatible Expo modules, and test the full create → connect → disconnect → reconnect flow on iPhone.
 - [ ] Obtain owner acceptance before merging the Pull Request.
-- No Firestore Rules have been deployed to the existing Firebase project; the PR remains draft pending additional security tests and iPhone acceptance.
+- GitHub Actions run `45856353502` (push) and `45856365322` (Pull Request), commit `8a10b69`: TypeScript, ESLint, unit tests (7/7), Auth Emulator (1/1), Firestore Rules Emulator (12/12) and Expo Doctor (20/20) passed. The production dependency audit still reports 3 moderate upstream `minimatch` advisories; it is non-blocking and documented above.
+- No Firestore Rules have been deployed to the existing Firebase project; the PR remains draft pending Windows/iPhone acceptance.
