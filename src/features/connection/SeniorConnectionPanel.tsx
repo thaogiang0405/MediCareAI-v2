@@ -29,19 +29,17 @@ export default function SeniorConnectionPanel() {
     if (!user || !profile || profile.role !== "senior") return;
     return watchConnectionMember(user.uid, value => {
       setMember(value);
+      if (!value || value.status !== "connected") setConnection(null);
       setMemberLoaded(true);
     }, error => setMessage(connectionErrorMessage(error)));
-  }, [user?.uid, profile?.role]);
+  }, [user, profile]);
 
   useEffect(() => {
-    if (!member || member.status !== "connected") {
-      setConnection(null);
-      return;
-    }
+    if (!member || member.status !== "connected") return;
     return watchConnection(member.connectionId, setConnection, error => {
       setMessage(connectionErrorMessage(error));
     });
-  }, [member?.connectionId, member?.status]);
+  }, [member]);
 
   if (!user || !profile || profile.role !== "senior") return null;
 
