@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { onIdTokenChanged, signOut, type User } from "firebase/auth";
+import { createContext, useContext, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { services, firebaseError } from "@/lib/firebase";
 import { readProfile, type Profile } from "@/features/profile/profile";
 import { authError } from "./validation";
@@ -9,10 +9,6 @@ type Context = Session & { refresh: () => Promise<void>; logout: () => Promise<v
 const AuthContext = createContext<Context | null>(null);
 const loading: Session = { status: "loading", user: null, profile: null };
 
-function invalidateGeneration(counter: { current: number }) {
-  counter.current += 1;
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session>(() =>
     services
@@ -20,7 +16,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       : { status: "error", user: null, profile: null, message: firebaseError ?? undefined },
   );
   const generation = useRef(0);
-  async function load(user: User | null, preserve = false) {
+  const load = useCallback(async (user: User | null, preserve = false) => {
     const ticket = ++generation.current;
     if (!preserve) setSession({ status: user ? "loading" : "guest", user, profile: null });
     if (!user) return;
@@ -32,18 +28,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (ticket === generation.current && services?.auth.currentUser?.uid === user.uid)
         setSession({ status: "error", user, profile: null, message: authError(e) });
     }
-  }
+  }, []);
   useEffect(() => {
     if (!services) return;
-    const unsubscribe = onIdTokenChanged(services.auth, user => { void load(user); }, () => {
+    const unsubscribe = onAuthStateChanged(services.auth, user => { void load(user); }, () => {
       ++generation.current;
       setSession({ status: "error", user: null, profile: null, message: "Không thể xác minh phiên đăng nhập." });
     });
     return () => {
-      invalidateGeneration(generation);
+      ++generation.current;
       unsubscribe();
     };
-  }, []);
+  }, [load]);
   async function refresh() {
     if (services) await load(services.auth.currentUser, session.status === "ready" && session.user?.uid === services.auth.currentUser?.uid);
   }
