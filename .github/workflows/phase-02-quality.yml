@@ -47,6 +47,9 @@ jobs:
       - name: Unit tests
         run: npm test
 
+      - name: Firebase Authentication Emulator tests
+        run: npm run test:auth
+
       - name: Firestore Rules Emulator tests
         run: npm run test:rules
 
