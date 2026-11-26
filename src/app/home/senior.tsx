@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "@/features/auth/AuthProvider";
 import { colors } from "@/theme";
 
 const features = [
@@ -28,6 +29,7 @@ const features = [
 
 export default function SeniorHomeScreen() {
   const router = useRouter();
+  const { profile } = useAuth();
 
   return (
     <SafeAreaView style={styles.safeArea} edges={["top", "bottom"]}>
@@ -41,12 +43,12 @@ export default function SeniorHomeScreen() {
           </View>
           <Text style={styles.brandName}>MediCare AI</Text>
           <View style={styles.previewBadge}>
-            <Text style={styles.previewText}>XEM TRƯỚC</Text>
+            <Text style={styles.previewText}>TÀI KHOẢN</Text>
           </View>
         </View>
 
         <View style={styles.greeting}>
-          <Text style={styles.greetingTitle}>Xin chào!</Text>
+          <Text style={styles.greetingTitle}>Xin chào, {profile?.fullName}!</Text>
           <Text style={styles.greetingDescription}>
             Chúc bạn một ngày vui khỏe và bình an.
           </Text>
@@ -79,12 +81,7 @@ export default function SeniorHomeScreen() {
           </Text>
         </View>
 
-        <Text onPress={() => router.replace("/role-select")} style={styles.link}>
-          Đổi vai trò xem trước
-        </Text>
-        <Text onPress={() => router.replace("/")} style={styles.secondaryLink}>
-          Về màn hình chào mừng
-        </Text>
+        <Text onPress={() => router.push("/profile")} style={styles.link}>Hồ sơ cá nhân và đăng xuất</Text>
       </ScrollView>
     </SafeAreaView>
   );

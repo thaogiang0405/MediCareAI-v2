@@ -1,0 +1,61 @@
+name: Phase 02 quality
+
+on:
+  push:
+    branches:
+      - feature/phase-02-auth
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: phase-02-quality-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: TypeScript, lint, tests and Expo checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Set up Java for Firebase Emulator
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Firebase Authentication Emulator tests
+        run: npm run test:auth
+
+      - name: Firestore Rules Emulator tests
+        run: npm run test:rules
+
+      - name: Expo Doctor
+        run: npx expo-doctor
+
+      - name: Production dependency audit (review upstream tooling findings)
+        run: npm audit --omit=dev
+        continue-on-error: true

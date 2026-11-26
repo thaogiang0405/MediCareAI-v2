@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -10,8 +10,13 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { createUserWithEmailAndPassword, validatePassword } from "firebase/auth";
+import { services } from "@/lib/firebase";
+import { completeProfile } from "@/features/profile/profile";
+import { authError, isRole, validEmail, validName } from "@/features/auth/validation";
+import { useAuth } from "@/features/auth/AuthProvider";
 import { colors } from "@/theme";
 
 export default function RegisterScreen() {
@@ -20,11 +25,50 @@ export default function RegisterScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleRegister = () => {
-    Alert.alert(
-      "Chưa kết nối Firebase",
-      "Chưa tạo tài khoản. Firebase Authentication sẽ được tích hợp ở giai đoạn tiếp theo."
-    );
+  const { role } = useLocalSearchParams<{role?: string}>();
+  const { refresh } = useAuth();
+  const [confirm,setConfirm] = useState("");
+  const [show,setShow] = useState(false);
+  const [busy,setBusy] = useState(false);
+  const lock = useRef(false);
+  const handleRegister = async () => {
+    if (lock.current) return;
+    if (!isRole(role)) { router.replace("/role-select"); return; }
+    if (!validName(name) || !validEmail(email)) { Alert.alert("Kiểm tra thông tin","Vui lòng nhập họ tên và email hợp lệ."); return; }
+    if (password.length < 6 || password !== confirm) { Alert.alert("Kiểm tra mật khẩu","Mật khẩu cần ít nhất 6 ký tự và xác nhận phải trùng khớp."); return; }
+    if (!services) return;
+    lock.current=true;setBusy(true);
+    let step = "password-policy";
+    const logFailure = (stage: string, error: unknown) => {
+      if (__DEV__) {
+        const code = typeof error === "object" && error && "code" in error && typeof error.code === "string"
+          ? error.code : "unknown";
+        console.log("[MediCare Auth]", stage, code);
+      }
+    };
+    try {
+      // Auth Emulator does not implement the password-policy endpoint.
+      // Local minimum/confirmation checks and the sign-up API still validate passwords.
+      // Retain the configured password policy for real Firebase staging.
+      if (!services.auth.emulatorConfig) {
+        const policy = await validatePassword(services.auth,password);
+        if (!policy.isValid) { Alert.alert("Mật khẩu","Mật khẩu chưa đáp ứng yêu cầu bảo mật."); return; }
+      }
+      step = "create-account";
+      const credential = await createUserWithEmailAndPassword(services.auth,email.trim(),password);
+      if (__DEV__) console.log("[MediCare Auth]", "create-account", "success");
+      try { await completeProfile(credential.user,name,role); }
+      catch (error) {
+        logFailure("complete-profile", error);
+        Alert.alert("Hoàn tất hồ sơ","Tài khoản đã được tạo. Vui lòng hoàn tất hồ sơ hoặc đăng nhập lại.");
+      }
+      step = "refresh-session";
+      await refresh();
+    } catch(e) {
+      logFailure(step, e);
+      Alert.alert("Đăng ký",authError(e));
+    }
+    finally { lock.current=false;setBusy(false); }
   };
 
   return (
@@ -94,18 +138,25 @@ export default function RegisterScreen() {
                 onChangeText={setPassword}
                 placeholder="Nhập mật khẩu"
                 placeholderTextColor="#98A8AD"
-                secureTextEntry
+                secureTextEntry={!show}
                 textContentType="newPassword"
                 returnKeyType="done"
               />
             </View>
 
+            <View style={styles.field}>
+              <Text style={styles.label}>Xác nhận mật khẩu</Text>
+              <TextInput style={styles.input} value={confirm} onChangeText={setConfirm} secureTextEntry={!show} autoCapitalize="none" placeholder="Nhập lại mật khẩu"/>
+            </View>
+            <Text onPress={()=>setShow(v=>!v)} style={styles.linkText}>{show?"Ẩn mật khẩu":"Hiện mật khẩu"}</Text>
+            <Text style={styles.label}>Vai trò: {role==="senior"?"Người cao tuổi":role==="family"?"Người thân":"Chưa chọn"}</Text>
             <Pressable
+              disabled={busy}
               accessibilityRole="button"
               onPress={handleRegister}
               style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}
             >
-              <Text style={styles.primaryButtonText}>Tạo tài khoản</Text>
+              <Text style={styles.primaryButtonText}>{busy?"Đang tạo tài khoản...":"Tạo tài khoản"}</Text>
             </Pressable>
           </View>
 
@@ -118,7 +169,7 @@ export default function RegisterScreen() {
           </Pressable>
 
           <Text style={styles.notice}>
-            Thông tin hiện chưa được gửi hoặc lưu vào Firebase.
+            Chỉ sử dụng thông tin kiểm thử trong Emulator.
           </Text>
         </ScrollView>
       </KeyboardAvoidingView>
