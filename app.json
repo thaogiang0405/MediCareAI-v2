@@ -1,0 +1,1 @@
+{"expo":{"name":"MediCare AI","slug":"medicare-ai-v2","version":"1.0.0","orientation":"portrait","userInterfaceStyle":"light","scheme":"medicareai","ios":{"supportsTablet":false,"bundleIdentifier":"com.thaogiang.medicareai"},"plugins":["expo-router"]}}
