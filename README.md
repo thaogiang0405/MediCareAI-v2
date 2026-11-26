@@ -50,7 +50,6 @@ Windows CMD (chỉ chuyển nhánh khi git status sạch):
 git fetch origin
 git switch --track origin/feature/phase-02-auth
 npm install
-npx expo install @react-native-async-storage/async-storage
 copy .env.example .env
 ipconfig
 notepad .env
