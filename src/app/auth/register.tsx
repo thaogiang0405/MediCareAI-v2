@@ -38,14 +38,36 @@ export default function RegisterScreen() {
     if (password.length < 6 || password !== confirm) { Alert.alert("Kiểm tra mật khẩu","Mật khẩu cần ít nhất 6 ký tự và xác nhận phải trùng khớp."); return; }
     if (!services) return;
     lock.current=true;setBusy(true);
+    let step = "password-policy";
+    const logFailure = (stage: string, error: unknown) => {
+      if (__DEV__) {
+        const code = typeof error === "object" && error && "code" in error && typeof error.code === "string"
+          ? error.code : "unknown";
+        console.log("[MediCare Auth]", stage, code);
+      }
+    };
     try {
-      const policy = await validatePassword(services.auth,password);
-      if (!policy.isValid) { Alert.alert("Mật khẩu","Mật khẩu chưa đáp ứng yêu cầu bảo mật."); return; }
+      // Auth Emulator does not implement the password-policy endpoint.
+      // Local minimum/confirmation checks and the sign-up API still validate passwords.
+      // Retain the configured password policy for real Firebase staging.
+      if (!services.auth.emulatorConfig) {
+        const policy = await validatePassword(services.auth,password);
+        if (!policy.isValid) { Alert.alert("Mật khẩu","Mật khẩu chưa đáp ứng yêu cầu bảo mật."); return; }
+      }
+      step = "create-account";
       const credential = await createUserWithEmailAndPassword(services.auth,email.trim(),password);
+      if (__DEV__) console.log("[MediCare Auth]", "create-account", "success");
       try { await completeProfile(credential.user,name,role); }
-      catch { Alert.alert("Hoàn tất hồ sơ","Tài khoản đã được tạo. Vui lòng hoàn tất hồ sơ hoặc đăng nhập lại."); }
+      catch (error) {
+        logFailure("complete-profile", error);
+        Alert.alert("Hoàn tất hồ sơ","Tài khoản đã được tạo. Vui lòng hoàn tất hồ sơ hoặc đăng nhập lại.");
+      }
+      step = "refresh-session";
       await refresh();
-    } catch(e) { Alert.alert("Đăng ký",authError(e)); }
+    } catch(e) {
+      logFailure(step, e);
+      Alert.alert("Đăng ký",authError(e));
+    }
     finally { lock.current=false;setBusy(false); }
   };
 
