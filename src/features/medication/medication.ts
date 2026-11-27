@@ -615,22 +615,30 @@ export async function reviewMedicationRequest(
       updatedAt: serverTimestamp(),
       reviewNote: reviewNote.trim().slice(0, 500),
     });
-    const notificationRef = doc(notificationCollection(seniorUid));
+    // Every decision is announced to all currently connected caregivers through
+    // the shared notification stream, including an approved stop proposal.
+    const reviewNotificationRef = doc(notificationCollection(seniorUid));
+    transaction.set(reviewNotificationRef, notificationData(
+      seniorUid,
+      profile,
+      "proposal_reviewed",
+      currentRequest.medicationId,
+      currentRequest.medicationName,
+      currentRequest.id,
+      currentRequest.requestType,
+      decision,
+    ));
+
+    // An approved stop also creates a separate status-history event so the
+    // inactive medication records exactly when and by whom it was stopped.
     if (decision === "approved" && currentRequest.requestType === "stop") {
-      // The approved stop is also the immutable status-history event shown on the inactive medicine.
-      transaction.set(notificationRef, notificationData(
-        seniorUid, profile, "medication_stopped", currentRequest.medicationId, currentRequest.medicationName,
-      ));
-    } else {
-      transaction.set(notificationRef, notificationData(
+      const statusNotificationRef = doc(notificationCollection(seniorUid));
+      transaction.set(statusNotificationRef, notificationData(
         seniorUid,
         profile,
-        "proposal_reviewed",
+        "medication_stopped",
         currentRequest.medicationId,
         currentRequest.medicationName,
-        currentRequest.id,
-        currentRequest.requestType,
-        decision,
       ));
     }
   });
