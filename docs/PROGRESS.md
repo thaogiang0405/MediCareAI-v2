@@ -87,14 +87,21 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - Preserve the agreed invitation flow: family member creates the code; senior enters and confirms. Keep existing Firebase data model, transaction logic, Security Rules, and authorization unchanged.
 - Compact the home header, greeting spacing and feature cards for iPhone. UI refinement is pending CI and physical iPhone acceptance.
 
-## Phase 04 — Medication Management (implementation in progress)
+## Phase 04 — Medication Management (policy revision in progress)
+
 - Started from Phase 03 merge commit 3afd62f on feature/phase-04-medication-management.
-- Reused the existing medication collection path elderlyProfiles/{seniorUid}/medications to preserve M3.2 medication records and the M3.3/M3.4 schedule and dose-event references.
-- Added medication form validation, Firestore CRUD/listener service, legacy-record upgrade-on-edit, status separation, and soft-delete.
-- Added a shared medication panel to senior and family home screens. Family users select one of their active Phase 03 connections before loading that senior's medications.
-- Extended Emulator Rules with owner-or-active-caregiver authorization, strict Phase 04 field validation, immutable owner/creator fields, revision increments, and soft-delete-only behavior. No deployed Firebase Rules change or cloud data migration performed.
-- Added Rules Emulator coverage for owner CRUD, connected caregiver CRUD, access revocation after disconnect, invalid schema, and cross-owner denial.
-- [ ] CI TypeScript, ESLint, unit, Auth Emulator, Firestore Rules Emulator and Expo Doctor.
-- [ ] Windows install and iPhone Expo Go acceptance.
-- [ ] Owner approval before PR merge.
-- OCR remains Phase 06; notifications and dose confirmation remain Phase 05. No paid service or native dependency added.
+- Preserved the existing medication collection path \`elderlyProfiles/{seniorUid}/medications\` and legacy M3.2/M3.3/M3.4 references. No migration or deletion.
+- Original Phase 04 medication form, Firestore service, status handling, soft-delete and date picker remain in place.
+- Owner-approved business policy (27/11/2026): the elderly owner alone directly creates, edits, stops and soft-deletes official medication records. A connected caregiver is read-only for the official medication list; they can submit create/update/stop/delete proposals and append intake logs, but cannot directly write medications or approve proposals.
+- Added \`medicationRequests\` subcollection for caregiver proposals. The elderly owner can approve/reject; client approval applies the medication change and request status in one Firestore transaction. Caregiver reads only their own requests while the connection remains active.
+- Added append-only \`medicationIntakeLogs\` subcollection. The elderly owner and connected caregiver can record and read medication intake; no client can update/delete a log.
+- Firestore Emulator Rules now allow medication reads to the owner and active caregiver but restrict medication create/update to the owner. Requests, review decisions, intake logs, and connection revocation have dedicated Rules. Caregiver access is revoked after disconnect.
+- Legal-representative authority is separate from family connection. Phase 04 does not grant this authority; \`legalRepresentativeAuthorizations\` is explicitly default-deny until an approved identity/evidence verification, grant, scope, expiry and revocation process exists.
+- Added [PHASE-04-MEDICATION-POLICY.md](PHASE-04-MEDICATION-POLICY.md) and aligned PROJECT_SCOPE.md with the approved permission matrix.
+- Updated Rules integration tests: owner CRUD; caregiver read-only medication access; caregiver proposal create/read; caregiver cannot mutate medication or approve; owner can review; both roles can append immutable intake logs; strangers/disconnected caregivers denied; representative authority is not inferred from connection.
+- [ ] Run GitHub Actions after the policy implementation and resolve any TypeScript, ESLint, Unit, Auth Emulator, Firestore Rules Emulator or Expo Doctor failures.
+- [ ] Pull latest branch to Windows and rerun typecheck, lint, tests, Auth Emulator, Rules Emulator and Expo Doctor.
+- [ ] Test owner add/edit/stop/delete, caregiver proposal/review, intake logs and disconnect revocation on iPhone.
+- [ ] Review current Firebase staging Rules and obtain explicit approval before any Rules deployment. No Firebase cloud Rules deployment or data migration performed by these source changes.
+- [ ] Owner acceptance before merging PR; do not merge in this work.
+- OCR remains Phase 06. Notifications and scheduled dose confirmation remain Phase 05. No paid service or native dependency added.
