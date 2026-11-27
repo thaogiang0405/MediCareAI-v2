@@ -496,9 +496,12 @@ test("Phase 04: connected caregiver can read medications and submit proposals, b
   await seedUsers();
   await assertSucceeds(issue("f1", "ABCD2345"));
   await assertSucceeds(connect("f1", "s1", "ABCD2345"));
+  await assertSucceeds(issue("f2", "EFGH6789"));
+  await assertSucceeds(connect("f2", "s1", "EFGH6789"));
 
   const senior = db("s1");
   const caregiver = db("f1");
+  const caregiverTwo = db("f2");
   const medicationRef = doc(senior, "elderlyProfiles", "s1", "medications", "med-1");
   await assertSucceeds(setDoc(medicationRef, medicationData("s1", "s1")));
 
@@ -612,6 +615,7 @@ test("Phase 04: owner approval applies a caregiver proposal atomically; rejectio
   assertEqual(updatedMedication.revision, 2);
   assertEqual((await assertSucceeds(getDoc(doc(senior, "elderlyProfiles", "s1", "medicationRequests", "update-request")))).data().status, "approved");
   await assertSucceeds(getDoc(doc(caregiver, "elderlyProfiles", "s1", "medicationNotifications", "review-update-request")));
+  await assertSucceeds(getDoc(doc(caregiverTwo, "elderlyProfiles", "s1", "medicationNotifications", "review-update-request")));
 
   const createRequestRef = doc(caregiver, "elderlyProfiles", "s1", "medicationRequests", "create-request");
   const ownerCreateRequestRef = doc(senior, "elderlyProfiles", "s1", "medicationRequests", "create-request");
@@ -637,21 +641,35 @@ test("Phase 04: owner approval applies a caregiver proposal atomically; rejectio
       updatedAt: serverTimestamp(),
       reviewNote: "Đã xem xét và đồng ý.",
     });
+    transaction.set(
+      doc(senior, "elderlyProfiles", "s1", "medicationNotifications", "review-create-request"),
+      medicationNotificationData("s1", "proposal_reviewed", null, "Paracetamol", "s1", names.s1, "elderly", "create-request", "create", "approved"),
+    );
     if (!requestSnapshot.exists()) throw new Error("Expected pending create request.");
   }));
   assertEqual((await assertSucceeds(getDoc(newMedicationRef))).data().createdByUid, "s1");
+  await assertSucceeds(getDoc(doc(caregiver, "elderlyProfiles", "s1", "medicationNotifications", "review-create-request")));
+  await assertSucceeds(getDoc(doc(caregiverTwo, "elderlyProfiles", "s1", "medicationNotifications", "review-create-request")));
 
   const rejectedRequestRef = doc(caregiver, "elderlyProfiles", "s1", "medicationRequests", "rejected-request");
   const ownerRejectedRequestRef = doc(senior, "elderlyProfiles", "s1", "medicationRequests", "rejected-request");
   await assertSucceeds(setDoc(rejectedRequestRef, medicationRequestData("s1", "f1", "update", "med-1")));
-  await assertSucceeds(updateDoc(ownerRejectedRequestRef, {
+  const rejectBatch = writeBatch(senior);
+  rejectBatch.update(ownerRejectedRequestRef, {
     status: "rejected",
     reviewedByUid: "s1",
     reviewedAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     reviewNote: "Không đồng ý.",
-  }));
+  });
+  rejectBatch.set(
+    doc(senior, "elderlyProfiles", "s1", "medicationNotifications", "review-rejected-request"),
+    medicationNotificationData("s1", "proposal_reviewed", "med-1", "Paracetamol", "s1", names.s1, "elderly", "rejected-request", "update", "rejected"),
+  );
+  await assertSucceeds(rejectBatch.commit());
   assertEqual((await assertSucceeds(getDoc(medicationRef))).data().dosage, "2");
+  await assertSucceeds(getDoc(doc(caregiver, "elderlyProfiles", "s1", "medicationNotifications", "review-rejected-request")));
+  await assertSucceeds(getDoc(doc(caregiverTwo, "elderlyProfiles", "s1", "medicationNotifications", "review-rejected-request")));
 
   const stopRequestRef = doc(caregiver, "elderlyProfiles", "s1", "medicationRequests", "stop-request");
   const ownerStopRequestRef = doc(senior, "elderlyProfiles", "s1", "medicationRequests", "stop-request");
@@ -674,13 +692,20 @@ test("Phase 04: owner approval applies a caregiver proposal atomically; rejectio
       reviewNote: "Đã duyệt ngừng thuốc.",
     });
     transaction.set(
+      doc(senior, "elderlyProfiles", "s1", "medicationNotifications", "approved-stop-proposal"),
+      medicationNotificationData("s1", "proposal_reviewed", "med-1", "Paracetamol", "s1", names.s1, "elderly", "stop-request", "stop", "approved"),
+    );
+    transaction.set(
       doc(senior, "elderlyProfiles", "s1", "medicationNotifications", "approved-stop-history"),
       medicationNotificationData("s1", "medication_stopped", "med-1", "Paracetamol", "s1", names.s1, "elderly"),
     );
     if (!requestSnapshot.exists()) throw new Error("Expected pending stop request.");
   }));
   assertEqual((await assertSucceeds(getDoc(medicationRef))).data().status, "inactive");
+  await assertSucceeds(getDoc(doc(caregiver, "elderlyProfiles", "s1", "medicationNotifications", "approved-stop-proposal")));
+  await assertSucceeds(getDoc(doc(caregiverTwo, "elderlyProfiles", "s1", "medicationNotifications", "approved-stop-proposal")));
   await assertSucceeds(getDoc(doc(caregiver, "elderlyProfiles", "s1", "medicationNotifications", "approved-stop-history")));
+  await assertSucceeds(getDoc(doc(caregiverTwo, "elderlyProfiles", "s1", "medicationNotifications", "approved-stop-history")));
 });
 
 test("Phase 04: caregiver proposals create shared notifications for the owner and every connected caregiver", async () => {
