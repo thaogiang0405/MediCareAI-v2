@@ -421,7 +421,26 @@ export async function reviewMedicationRequest(
         });
       } else {
         const nextStatus = currentRequest.requestType === "stop" ? "inactive" : "deleted";
+        const existingIntakeTimes = Array.isArray(medicationData.intakeTimes) && medicationData.intakeTimes.length > 0
+          ? medicationData.intakeTimes
+          : ["08:00"];
+        const existingFrequency = Array.isArray(medicationData.intakeTimes) && medicationData.intakeTimes.length > 0
+          ? (typeof medicationData.frequency === "number" ? medicationData.frequency : existingIntakeTimes.length)
+          : 1;
         transaction.update(medicationRef, {
+          ownerUid: seniorUid,
+          name: typeof medicationData.name === "string" ? medicationData.name : "",
+          strengthText: typeof medicationData.strengthText === "string" ? medicationData.strengthText : "",
+          dosage: typeof medicationData.dosage === "string" ? medicationData.dosage : "",
+          dosageUnit: typeof medicationData.dosageUnit === "string" ? medicationData.dosageUnit : "liều",
+          dosageForm: typeof medicationData.dosageForm === "string" ? medicationData.dosageForm : "other",
+          frequency: existingFrequency,
+          intakeTimes: existingIntakeTimes,
+          directionsText: typeof medicationData.directionsText === "string" ? medicationData.directionsText : "",
+          startDate: typeof medicationData.startDate === "string" ? medicationData.startDate : "",
+          endDate: typeof medicationData.endDate === "string" ? medicationData.endDate : "",
+          notes: typeof medicationData.notes === "string" ? medicationData.notes : "",
+          createdByUid: typeof medicationData.createdByUid === "string" ? medicationData.createdByUid : seniorUid,
           status: nextStatus,
           deletedAt: nextStatus === "deleted" ? serverTimestamp() : null,
           updatedByUid: user.uid,
