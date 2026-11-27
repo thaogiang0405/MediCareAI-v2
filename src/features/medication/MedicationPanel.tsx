@@ -45,6 +45,13 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
   }, [family, user.uid]);
 
   useEffect(() => {
+    if (family && connections && seniorUid && !connections.some(item => item.seniorUid === seniorUid)) {
+      setSeniorUid("");
+      setMedications(null);
+    }
+  }, [family, connections, seniorUid]);
+
+  useEffect(() => {
     setMedications(null);
     setLoadError("");
     if (!seniorUid) return;
