@@ -386,7 +386,11 @@ async function updateMedicationRecord(
     if (notificationType) {
       const notificationRef = doc(notificationCollection(seniorUid));
       transaction.set(notificationRef, notificationData(
-        seniorUid, profile, notificationType, medication.id, medication.name,
+        seniorUid,
+        profile,
+        notificationType,
+        medication.id,
+        typeof current.name === "string" ? current.name : medication.name,
       ));
     }
   });
@@ -612,16 +616,23 @@ export async function reviewMedicationRequest(
       reviewNote: reviewNote.trim().slice(0, 500),
     });
     const notificationRef = doc(notificationCollection(seniorUid));
-    transaction.set(notificationRef, notificationData(
-      seniorUid,
-      profile,
-      "proposal_reviewed",
-      currentRequest.medicationId,
-      currentRequest.medicationName,
-      currentRequest.id,
-      currentRequest.requestType,
-      decision,
-    ));
+    if (decision === "approved" && currentRequest.requestType === "stop") {
+      // The approved stop is also the immutable status-history event shown on the inactive medicine.
+      transaction.set(notificationRef, notificationData(
+        seniorUid, profile, "medication_stopped", currentRequest.medicationId, currentRequest.medicationName,
+      ));
+    } else {
+      transaction.set(notificationRef, notificationData(
+        seniorUid,
+        profile,
+        "proposal_reviewed",
+        currentRequest.medicationId,
+        currentRequest.medicationName,
+        currentRequest.id,
+        currentRequest.requestType,
+        decision,
+      ));
+    }
   });
 }
 
