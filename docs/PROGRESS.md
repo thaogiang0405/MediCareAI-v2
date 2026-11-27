@@ -64,3 +64,14 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - [ ] Obtain owner acceptance before merging the Pull Request.
 - GitHub Actions run `45856353502` (push) and `45856365322` (Pull Request), commit `8a10b69`: TypeScript, ESLint, unit tests (7/7), Auth Emulator (1/1), Firestore Rules Emulator (12/12) and Expo Doctor (20/20) passed. The production dependency audit still reports 3 moderate upstream `minimatch` advisories; it is non-blocking and documented above.
 - No Firestore Rules have been deployed to the existing Firebase project; the PR remains draft pending Windows/iPhone acceptance.
+
+
+### Phase 03 scope correction — many-to-many (owner approved)
+- Previous one-to-one implementation passed Windows typecheck/lint, 7 unit, 1 Auth and 12 Rules Emulator tests; those results do not certify this revision.
+- Replace account-wide member locks with one lock per family/senior pair: connectionPairs/{familyUid}/seniors/{seniorUid}. Connection history is still keyed by one-use invite code. Participant-scoped queries return only the caller's connection records. No composite index required for single-field filters.
+- Keep one currently issued invite per caregiver; a new invite invalidates the unused prior invite, not existing relationships. Each code expires exactly 15 minutes after its server-created timestamp. Invalid/expired/used/revoked codes share a safe permission error; no private names exposed through stale codes.
+- Client uses real transaction reads only on authorized documents; no lookup of a new random code or nonexistent connection history. Rules prevent overwrites; a rare code collision fails safely and user can retry.
+- Preserve history on disconnect; reconnect creates a fresh history entry. No health data access is granted.
+- 8-character codes have 40 bits of entropy; Spark Rules do not supply a per-user server rate limiter. This is a limited staging/demo design, not a claim of production abuse resistance. Keep codes private.
+- No deployed Rules change or data migration performed. Existing unshipped single-member index is denied; no known cloud Phase 03 data. No deletion.
+- [ ] CI and Windows checks for this revision, then physical iPhone acceptance, then explicitly authorized staging Rules review and smoke test. PR remains draft.

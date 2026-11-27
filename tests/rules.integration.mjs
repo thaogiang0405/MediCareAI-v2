@@ -14,6 +14,9 @@ import {
   serverTimestamp,
   Timestamp,
   writeBatch,
+  runTransaction,
+  query,
+  where,
   collection,
   getDocs,
 } from "firebase/firestore";
@@ -193,265 +196,178 @@ test("caregiver, invite, and unknown collections remain denied", async () => {
 });
 
 
-async function seedProfile(uid, role, displayName) {
-  await env.withSecurityRulesDisabled(async context => {
-    await setDoc(userRef(context.firestore(), uid), profileData(uid, role, displayName));
-  });
-}
-
-async function seedConnectionUsers() {
-  await seedProfile("family-user", "caregiver", "Nguyễn Thị Bình");
-  await seedProfile("senior-user", "elderly", "Nguyễn Văn An");
-  await seedProfile("other-family", "caregiver", "Trần Thị Hoa");
-  await seedProfile("other-senior", "elderly", "Trần Văn Nam");
-  await seedProfile("victim-user", "elderly", "Lê Văn Minh");
-}
-
-async function createInviteAsFamily(code) {
-  const family = db("family-user");
-  const inviteRef = doc(family, "connectionInvites", code);
-  const slotRef = doc(family, "connectionInviteSlots", "family-user");
-  const expiresAt = Timestamp.fromMillis(Date.now() + 10 * 60 * 1000);
-  const inviteData = {
-    familyUid: "family-user",
-    familyDisplayName: "Nguyễn Thị Bình",
-    status: "active",
-    createdAt: serverTimestamp(),
-    expiresAt,
-    usedBy: null,
-    usedAt: null,
-    connectionId: null,
-    updatedAt: serverTimestamp(),
-  };
-  const slotData = {
-    familyUid: "family-user",
-    inviteCode: code,
-    status: "active",
-    createdAt: serverTimestamp(),
-    expiresAt,
-    usedBy: null,
-    usedAt: null,
-    connectionId: null,
-    updatedAt: serverTimestamp(),
-  };
-
-  const slotSnapshot = await getDoc(slotRef);
-  const batch = writeBatch(family);
-  batch.set(inviteRef, inviteData);
-  if (slotSnapshot.exists()) {
-    const previousCode = slotSnapshot.data().inviteCode;
-    if (typeof previousCode === "string" && previousCode !== code) {
-      const previousInviteRef = doc(family, "connectionInvites", previousCode);
-      const previousInvite = await getDoc(previousInviteRef);
-      if (previousInvite.exists() && previousInvite.data().status === "active") {
-        batch.update(previousInviteRef, {
-          status: "revoked",
-          updatedAt: serverTimestamp(),
-        });
-      }
+const assertEqual = (actual, expected) => {
+  if (actual !== expected) throw new Error("Expected " + expected + ", got " + actual);
+};
+const names = { f1: "Nguyễn Thị Bình", f2: "Trần Thị Hoa", s1: "Nguyễn Văn An", s2: "Trần Văn Nam", s3: "Lê Văn Minh" };
+async function seedUsers() {
+  await env.withSecurityRulesDisabled(async c => {
+    for (const [uid, name] of Object.entries(names)) {
+      await setDoc(userRef(c.firestore(), uid), profileData(uid, uid.startsWith("f") ? "caregiver" : "elderly", name));
     }
-    batch.update(slotRef, slotData);
-  } else {
-    batch.set(slotRef, slotData);
-  }
-  await assertSucceeds(batch.commit());
+  });
+}
+const pairRef = (store, f, s) => doc(store, "connectionPairs", f, "seniors", s);
+const inviteRef = (store, code) => doc(store, "connectionInvites", code);
+const slotRef = (store, f) => doc(store, "connectionInviteSlots", f);
+const connRef = (store, code) => doc(store, "connections", code);
+const unused = () => ({ status: "active", createdAt: serverTimestamp(), updatedAt: serverTimestamp(), usedBy: null, usedAt: null, connectionId: null });
+const consumed = (s, code) => ({ status: "used", usedBy: s, usedAt: serverTimestamp(), connectionId: code, updatedAt: serverTimestamp() });
+
+function issue(f, code, actor = f) {
+  const store = db(actor);
+  return runTransaction(store, async tx => {
+    const slot = await tx.get(slotRef(store, f));
+    if (slot.exists() && slot.data().status === "active") {
+      tx.update(inviteRef(store, slot.data().inviteCode), { status: "revoked", updatedAt: serverTimestamp() });
+    }
+    tx.set(inviteRef(store, code), { familyUid: f, familyDisplayName: names[f], ...unused() });
+    tx.set(slotRef(store, f), { familyUid: f, inviteCode: code, ...unused() });
+  });
+}
+function stageConnect(tx, store, f, s, code) {
+  tx.set(connRef(store, code), { familyUid: f, seniorUid: s, familyDisplayName: names[f],
+    seniorDisplayName: names[s], status: "connected", createdAt: serverTimestamp(),
+    connectedAt: serverTimestamp(), disconnectedAt: null, disconnectedBy: null, updatedAt: serverTimestamp() });
+  tx.update(inviteRef(store, code), consumed(s, code));
+  tx.update(slotRef(store, f), consumed(s, code));
+  tx.set(pairRef(store, f, s), { connectionId: code, status: "connected", updatedAt: serverTimestamp() });
+}
+function connect(f, s, code, actor = s) {
+  const store = db(actor);
+  return runTransaction(store, async tx => {
+    await tx.get(inviteRef(store, code));
+    await tx.get(pairRef(store, f, s));
+    stageConnect(tx, store, f, s, code);
+  });
+}
+// Deliberately skip client checks to test the server's invariants.
+function forceConnect(f, s, code, actor = s) {
+  const store = db(actor);
+  const batch = writeBatch(store);
+  stageConnect(batch, store, f, s, code);
+  return batch.commit();
+}
+function disconnect(f, s, code, actor) {
+  const store = db(actor);
+  return runTransaction(store, async tx => {
+    await tx.get(connRef(store, code));
+    tx.update(connRef(store, code), { status: "disconnected", disconnectedAt: serverTimestamp(),
+      disconnectedBy: actor, updatedAt: serverTimestamp() });
+    tx.update(pairRef(store, f, s), { status: "disconnected", updatedAt: serverTimestamp() });
+  });
+}
+async function active(uid) {
+  const store = db(uid);
+  const field = uid.startsWith("f") ? "familyUid" : "seniorUid";
+  const snap = await assertSucceeds(getDocs(query(collection(store, "connections"), where(field, "==", uid))));
+  return snap.docs.filter(d => d.data().status === "connected").map(d => d.id).sort().join(",");
 }
 
-async function connectAsSenior(code) {
-  const senior = db("senior-user");
-  const batch = writeBatch(senior);
-  const inviteRef = doc(senior, "connectionInvites", code);
-  const slotRef = doc(senior, "connectionInviteSlots", "family-user");
-  const connectionRef = doc(senior, "connections", code);
-
-  batch.update(inviteRef, {
-    status: "used",
-    usedBy: "senior-user",
-    usedAt: serverTimestamp(),
-    connectionId: code,
-    updatedAt: serverTimestamp(),
-  });
-  batch.update(slotRef, {
-    status: "used",
-    usedBy: "senior-user",
-    usedAt: serverTimestamp(),
-    connectionId: code,
-    updatedAt: serverTimestamp(),
-  });
-  batch.set(connectionRef, {
-    familyUid: "family-user",
-    seniorUid: "senior-user",
-    familyDisplayName: "Nguyễn Thị Bình",
-    seniorDisplayName: "Nguyễn Văn An",
-    status: "connected",
-    createdAt: serverTimestamp(),
-    connectedAt: serverTimestamp(),
-    disconnectedAt: null,
-    disconnectedBy: null,
-    updatedAt: serverTimestamp(),
-  });
-  batch.set(doc(senior, "connectionMembers", "family-user"), {
-    uid: "family-user",
-    role: "family",
-    counterpartUid: "senior-user",
-    counterpartDisplayName: "Nguyễn Văn An",
-    connectionId: code,
-    status: "connected",
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-  batch.set(doc(senior, "connectionMembers", "senior-user"), {
-    uid: "senior-user",
-    role: "senior",
-    counterpartUid: "family-user",
-    counterpartDisplayName: "Nguyễn Thị Bình",
-    connectionId: code,
-    status: "connected",
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
-  });
-
-  await assertSucceeds(batch.commit());
-}
-
-async function disconnectAs(uid, code) {
-  const firestore = db(uid);
-  const batch = writeBatch(firestore);
-  batch.update(doc(firestore, "connections", code), {
-    status: "disconnected",
-    disconnectedAt: serverTimestamp(),
-    disconnectedBy: uid,
-    updatedAt: serverTimestamp(),
-  });
-  batch.update(doc(firestore, "connectionMembers", "family-user"), {
-    status: "disconnected",
-    updatedAt: serverTimestamp(),
-  });
-  batch.update(doc(firestore, "connectionMembers", "senior-user"), {
-    status: "disconnected",
-    updatedAt: serverTimestamp(),
-  });
-  await assertSucceeds(batch.commit());
-}
-
-test("family creates a one-use invite; only the family owner and a senior with the code can preview it", async () => {
-  await seedConnectionUsers();
-  await createInviteAsFamily("ABCD2345");
-
-  const family = db("family-user");
-  const senior = db("senior-user");
-  const otherFamily = db("other-family");
-
-  const ownerSnapshot = await assertSucceeds(
-    getDoc(doc(family, "connectionInvites", "ABCD2345")),
-  );
-  if (ownerSnapshot.data().familyDisplayName !== "Nguyễn Thị Bình") {
-    throw new Error("The invite should expose the correct family display name.");
-  }
-
-  await assertSucceeds(getDoc(doc(senior, "connectionInvites", "ABCD2345")));
-  await assertFails(getDoc(doc(otherFamily, "connectionInvites", "ABCD2345")));
-  await assertFails(getDocs(collection(senior, "connectionInvites")));
-  await assertFails(
-    setDoc(doc(senior, "connectionInvites", "EFGH6789"), {
-      familyUid: "senior-user",
-      familyDisplayName: "Nguyễn Văn An",
-      status: "active",
-      createdAt: serverTimestamp(),
-      expiresAt: Timestamp.fromMillis(Date.now() + 600000),
-      usedBy: null,
-      usedAt: null,
-      connectionId: null,
-      updatedAt: serverTimestamp(),
-    }),
-  );
+test("family creates a code using actual client transaction reads; senior can preview, others cannot list", async () => {
+  await seedUsers();
+  await assertSucceeds(issue("f1","ABCD2345"));
+  assertEqual((await assertSucceeds(getDoc(inviteRef(db("s1"),"ABCD2345")))).data().familyDisplayName,names.f1);
+  await assertFails(getDoc(inviteRef(db("f2"),"ABCD2345")));
+  await assertFails(getDocs(collection(db("s1"),"connectionInvites")));
+  await assertFails(issue("s1","EFGH6789"));
+  await assertFails(forceConnect("f1","s1","ABCD2345","f1"));
 });
-
-test("senior consumes an invite atomically; connection history and member indexes are private", async () => {
-  await seedConnectionUsers();
-  await createInviteAsFamily("ABCD2345");
-  await connectAsSenior("ABCD2345");
-
-  const family = db("family-user");
-  const senior = db("senior-user");
-  const otherSenior = db("other-senior");
-
-  await assertSucceeds(getDoc(doc(family, "connections", "ABCD2345")));
-  await assertSucceeds(getDoc(doc(senior, "connections", "ABCD2345")));
-  await assertFails(getDoc(doc(otherSenior, "connections", "ABCD2345")));
-  await assertSucceeds(getDoc(doc(family, "connectionMembers", "family-user")));
-  await assertSucceeds(getDoc(doc(senior, "connectionMembers", "senior-user")));
-  await assertFails(getDoc(doc(family, "connectionMembers", "senior-user")));
-  await assertFails(getDoc(doc(senior, "connectionMembers", "family-user")));
-  await assertFails(getDoc(doc(otherSenior, "connectionInvites", "ABCD2345")));
-
-  const invite = await assertSucceeds(
-    getDoc(doc(family, "connectionInvites", "ABCD2345")),
-  );
-  if (invite.data().status !== "used" || invite.data().usedBy !== "senior-user") {
-    throw new Error("The invite must be marked used by the confirming senior.");
-  }
+test("many-to-many: two caregivers for one senior and one caregiver for two seniors", async () => {
+  await seedUsers();
+  await assertSucceeds(issue("f1","ABCD2345"));
+  await assertSucceeds(connect("f1","s1","ABCD2345"));
+  await assertSucceeds(issue("f2","EFGH6789"));
+  await assertSucceeds(connect("f2","s1","EFGH6789"));
+  await assertSucceeds(issue("f1","JKLM2345"));
+  await assertSucceeds(connect("f1","s2","JKLM2345"));
+  assertEqual(await active("s1"),"ABCD2345,EFGH6789");
+  assertEqual(await active("f1"),"ABCD2345,JKLM2345");
+  assertEqual(await active("s2"),"JKLM2345");
+  assertEqual(await active("f2"),"EFGH6789");
 });
-
-test("a senior cannot create a member index for an unrelated account", async () => {
-  await seedConnectionUsers();
-  await createInviteAsFamily("ABCD2345");
-  await connectAsSenior("ABCD2345");
-
-  const senior = db("senior-user");
-  await assertFails(
-    setDoc(doc(senior, "connectionMembers", "victim-user"), {
-      uid: "victim-user",
-      role: "senior",
-      counterpartUid: "family-user",
-      counterpartDisplayName: "Nguyễn Thị Bình",
-      connectionId: "ABCD2345",
-      status: "connected",
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    }),
-  );
+test("duplicate pair and consumed code cannot be accepted, even with direct writes", async () => {
+  await seedUsers();
+  await assertSucceeds(issue("f1","ABCD2345"));
+  await assertSucceeds(connect("f1","s1","ABCD2345"));
+  await assertFails(forceConnect("f1","s2","ABCD2345"));
+  await assertFails(getDoc(inviteRef(db("s2"),"ABCD2345")));
+  await assertSucceeds(issue("f1","EFGH6789"));
+  await assertFails(forceConnect("f1","s1","EFGH6789"));
+  assertEqual((await assertSucceeds(getDoc(inviteRef(db("f1"),"EFGH6789")))).data().status,"active");
+  await assertSucceeds(connect("f1","s2","EFGH6789"));
 });
-
-test("either participant can disconnect; the family can reconnect with a fresh one-use code", async () => {
-  await seedConnectionUsers();
-  await createInviteAsFamily("ABCD2345");
-  await connectAsSenior("ABCD2345");
-  await disconnectAs("senior-user", "ABCD2345");
-
-  const family = db("family-user");
-  const firstHistory = await assertSucceeds(
-    getDoc(doc(family, "connections", "ABCD2345")),
-  );
-  if (firstHistory.data().status !== "disconnected"
-    || firstHistory.data().disconnectedBy !== "senior-user") {
-    throw new Error("The first connection should retain its disconnection history.");
-  }
-
-  await createInviteAsFamily("EFGH6789");
-  await connectAsSenior("EFGH6789");
-  await disconnectAs("family-user", "EFGH6789");
-
-  const secondHistory = await assertSucceeds(
-    getDoc(doc(family, "connections", "EFGH6789")),
-  );
-  const familyMember = await assertSucceeds(
-    getDoc(doc(family, "connectionMembers", "family-user")),
-  );
-  if (secondHistory.data().status !== "disconnected"
-    || secondHistory.data().disconnectedBy !== "family-user"
-    || familyMember.data().status !== "disconnected"
-    || familyMember.data().connectionId !== "EFGH6789") {
-    throw new Error("The second connection should disconnect cleanly from the family side.");
-  }
+test("either side disconnects exactly one pair; reconnect preserves previous history", async () => {
+  await seedUsers();
+  await assertSucceeds(issue("f1","ABCD2345"));
+  await assertSucceeds(connect("f1","s1","ABCD2345"));
+  await assertSucceeds(issue("f2","EFGH6789"));
+  await assertSucceeds(connect("f2","s1","EFGH6789"));
+  await assertSucceeds(issue("f1","JKLM2345"));
+  await assertSucceeds(connect("f1","s2","JKLM2345"));
+  await assertSucceeds(disconnect("f1","s1","ABCD2345","s1"));
+  assertEqual(await active("s1"),"EFGH6789");
+  assertEqual(await active("f1"),"JKLM2345");
+  await assertSucceeds(issue("f1","NPQR6789"));
+  await assertSucceeds(connect("f1","s1","NPQR6789"));
+  assertEqual(await active("s1"),"EFGH6789,NPQR6789");
+  await assertSucceeds(disconnect("f1","s1","NPQR6789","f1"));
+  assertEqual(await active("f1"),"JKLM2345");
+  assertEqual(await active("s1"),"EFGH6789");
+  assertEqual((await assertSucceeds(getDoc(connRef(db("s1"),"ABCD2345")))).data().disconnectedBy,"s1");
+  assertEqual((await assertSucceeds(getDoc(connRef(db("f1"),"NPQR6789")))).data().disconnectedBy,"f1");
 });
-
-test("creating a replacement invite revokes the previous active code", async () => {
-  await seedConnectionUsers();
-  await createInviteAsFamily("ABCD2345");
-  await createInviteAsFamily("EFGH6789");
-
-  const senior = db("senior-user");
-  await assertFails(getDoc(doc(senior, "connectionInvites", "ABCD2345")));
-  await assertSucceeds(getDoc(doc(senior, "connectionInvites", "EFGH6789")));
+test("unrelated users cannot read/list/write pair, history, profiles or health records", async () => {
+  await seedUsers();
+  await assertSucceeds(issue("f1","ABCD2345"));
+  await assertSucceeds(connect("f1","s1","ABCD2345"));
+  const stranger = db("s3");
+  await assertFails(getDoc(connRef(stranger,"ABCD2345")));
+  await assertFails(getDoc(pairRef(stranger,"f1","s1")));
+  await assertFails(getDocs(query(collection(stranger,"connections"),where("familyUid","==","f1"))));
+  await assertFails(getDocs(collection(db("f1"),"connections")));
+  await assertFails(getDoc(userRef(db("f1"),"s1")));
+  await assertFails(getDoc(doc(db("f1"),"elderlyProfiles","s1","medications","m1")));
+  await assertFails(disconnect("f1","s1","ABCD2345","s3"));
+  await assertFails(setDoc(pairRef(db("s1"),"f2","s1"),{ connectionId:"ABCD2345",status:"connected",updatedAt:serverTimestamp() }));
+  await assertFails(setDoc(pairRef(db("s1"),"f1","s3"),{ connectionId:"ABCD2345",status:"connected",updatedAt:serverTimestamp() }));
+  await assertFails(updateDoc(connRef(db("s1"),"ABCD2345"),{ familyUid:"f2",updatedAt:serverTimestamp() }));
+  await assertFails(updateDoc(connRef(db("s1"),"ABCD2345"),{ status:"disconnected",disconnectedAt:serverTimestamp(),disconnectedBy:"s1",updatedAt:serverTimestamp() }));
+  await assertFails(updateDoc(pairRef(db("s1"),"f1","s1"),{ status:"disconnected",updatedAt:serverTimestamp() }));
+});
+test("replacement invalidates old code and collision cannot overwrite another invite", async () => {
+  await seedUsers();
+  await assertSucceeds(issue("f1","ABCD2345"));
+  await assertFails(issue("f2","ABCD2345"));
+  await assertSucceeds(issue("f1","EFGH6789"));
+  await assertFails(getDoc(inviteRef(db("s1"),"ABCD2345")));
+  await assertFails(forceConnect("f1","s1","ABCD2345"));
+  await assertSucceeds(connect("f1","s1","EFGH6789"));
+});
+test("expired code is denied by server time without waiting 15 minutes", async () => {
+  await seedUsers();
+  await assertSucceeds(issue("f1","ABCD2345"));
+  await env.withSecurityRulesDisabled(async c => {
+    const store = c.firestore();
+    const past = Timestamp.fromMillis(Date.now()-16*60000);
+    await updateDoc(inviteRef(store,"ABCD2345"),{createdAt:past});
+    await updateDoc(slotRef(store,"f1"),{createdAt:past});
+  });
+  await assertFails(getDoc(inviteRef(db("s1"),"ABCD2345")));
+  await assertFails(forceConnect("f1","s1","ABCD2345"));
+});
+test("concurrent acceptance allows exactly one senior per invite", async () => {
+  await seedUsers();
+  await assertSucceeds(issue("f1","ABCD2345"));
+  const results = await Promise.allSettled([forceConnect("f1","s1","ABCD2345"),forceConnect("f1","s2","ABCD2345")]);
+  assertEqual(results.filter(r => r.status === "fulfilled").length,1);
+  assertEqual(await active("f1"),"ABCD2345");
+});
+test("partial connection or invite writes cannot bypass atomic workflow", async () => {
+  await seedUsers();
+  const store = db("f1");
+  await assertFails(setDoc(inviteRef(store,"ABCD2345"),{familyUid:"f1",familyDisplayName:names.f1,...unused()}));
+  await assertSucceeds(issue("f1","ABCD2345"));
+  await assertFails(updateDoc(inviteRef(db("s1"),"ABCD2345"),consumed("s1","ABCD2345")));
+  await assertFails(setDoc(pairRef(db("s1"),"f1","s1"),{connectionId:"ABCD2345",status:"connected",updatedAt:serverTimestamp()}));
 });

@@ -493,211 +493,144 @@ service cloud.firestore {
     }
 
 
+
+    // Phase 03: many-to-many. One active connection per family/senior pair.
     function isFamily(uid) {
-      let p = /databases/$(database)/documents/users/$(uid);
-      return exists(p) && get(p).data.uid == uid
-        && get(p).data.primaryRole == 'caregiver'
-        && get(p).data.roles.caregiver == true
-        && get(p).data.roles.elderly == false
-        && get(p).data.onboardingCompleted == true;
+      let p = get(/databases/$(database)/documents/users/$(uid)).data;
+      return p.uid == uid && hasValidUserProfileSchema(p)
+        && p.primaryRole == 'caregiver' && p.onboardingCompleted == true;
     }
     function isSenior(uid) {
-      let p = /databases/$(database)/documents/users/$(uid);
-      return exists(p) && get(p).data.uid == uid
-        && get(p).data.primaryRole == 'elderly'
-        && get(p).data.roles.elderly == true
-        && get(p).data.roles.caregiver == false
-        && get(p).data.onboardingCompleted == true;
-    }
-    function memberAvailable(uid) {
-      let p = /databases/$(database)/documents/connectionMembers/$(uid);
-      return !exists(p) || get(p).data.status == 'disconnected';
+      let p = get(/databases/$(database)/documents/users/$(uid)).data;
+      return p.uid == uid && hasValidUserProfileSchema(p)
+        && p.primaryRole == 'elderly' && p.onboardingCompleted == true;
     }
     function validCode(code) {
-      return code.matches('^[A-HJ-NP-Z2-9]{8}$');
+      return code is string && code.matches('^[A-HJ-NP-Z2-9]{8}$');
     }
-    function validInvite(data, code) {
-      return data.keys().hasOnly(['familyUid','familyDisplayName','status','createdAt','expiresAt','usedBy','usedAt','connectionId','updatedAt'])
-        && data.familyUid is string && data.familyDisplayName is string
-        && data.status in ['active','used','revoked'] && validCode(code)
-        && data.createdAt is timestamp && data.expiresAt is timestamp
-        && (data.usedBy == null || data.usedBy is string)
-        && (data.usedAt == null || data.usedAt is timestamp)
-        && (data.connectionId == null || data.connectionId is string)
-        && data.updatedAt is timestamp;
+    function participant(d) {
+      return signedIn() && (request.auth.uid == d.familyUid || request.auth.uid == d.seniorUid);
     }
-    function validSlot(data) {
-      return data.keys().hasOnly(['familyUid','inviteCode','status','createdAt','expiresAt','usedBy','usedAt','connectionId','updatedAt'])
-        && data.familyUid is string && validCode(data.inviteCode)
-        && data.status in ['active','used'] && data.createdAt is timestamp
-        && data.expiresAt is timestamp && data.updatedAt is timestamp
-        && (data.usedBy == null || data.usedBy is string)
-        && (data.usedAt == null || data.usedAt is timestamp)
-        && (data.connectionId == null || data.connectionId is string);
+    function freshInvite(d) {
+      return d.status == 'active' && d.createdAt <= request.time
+        && request.time < d.createdAt + duration.value(15, 'm');
     }
-    function validConnection(data, code) {
-      return data.keys().hasOnly(['familyUid','seniorUid','familyDisplayName','seniorDisplayName','status','createdAt','connectedAt','disconnectedAt','disconnectedBy','updatedAt'])
-        && data.familyUid is string && data.seniorUid is string
-        && data.familyUid != data.seniorUid && validCode(code)
-        && data.familyDisplayName is string && data.seniorDisplayName is string
-        && data.status in ['connected','disconnected']
-        && data.createdAt is timestamp && data.connectedAt is timestamp
-        && (data.disconnectedAt == null || data.disconnectedAt is timestamp)
-        && (data.disconnectedBy == null || data.disconnectedBy is string)
-        && data.updatedAt is timestamp;
+    function currentInvite(code, familyUid) {
+      let s = get(/databases/$(database)/documents/connectionInviteSlots/$(familyUid)).data;
+      return s.familyUid == familyUid && s.inviteCode == code && s.status == 'active';
     }
-    function validMember(data, uid) {
-      return data.keys().hasOnly(['uid','role','counterpartUid','counterpartDisplayName','connectionId','status','createdAt','updatedAt'])
-        && data.uid == uid && data.role in ['family','senior']
-        && data.counterpartUid is string && data.counterpartUid != uid
-        && data.counterpartDisplayName is string && validCode(data.connectionId)
-        && data.status in ['connected','disconnected']
-        && data.createdAt is timestamp && data.updatedAt is timestamp;
+    function newInviteData(d, code) {
+      return d.keys().hasOnly(['familyUid','familyDisplayName','status','createdAt','usedBy','usedAt','connectionId','updatedAt'])
+        && validCode(code) && d.familyUid == request.auth.uid
+        && d.familyDisplayName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
+        && d.status == 'active' && d.createdAt == request.time && d.updatedAt == request.time
+        && d.usedBy == null && d.usedAt == null && d.connectionId == null;
     }
-    function connectionParticipant(data) {
-      return signedIn() && (request.auth.uid == data.familyUid || request.auth.uid == data.seniorUid);
+    function newSlotData(d, uid) {
+      let i = getAfter(/databases/$(database)/documents/connectionInvites/$(d.inviteCode)).data;
+      return d.keys().hasOnly(['familyUid','inviteCode','status','createdAt','usedBy','usedAt','connectionId','updatedAt'])
+        && d.familyUid == uid && validCode(d.inviteCode)
+        && d.status == 'active' && d.createdAt == request.time && d.updatedAt == request.time
+        && d.usedBy == null && d.usedAt == null && d.connectionId == null
+        && i.familyUid == uid && i.status == 'active' && i.createdAt == request.time;
     }
     function createInvite(code) {
       let d = request.resource.data;
-      let slot = /databases/$(database)/documents/connectionInviteSlots/$(request.auth.uid);
-      return signedIn() && isFamily(request.auth.uid) && validInvite(d, code)
-        && d.familyUid == request.auth.uid && d.familyDisplayName == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.displayName
-        && d.status == 'active' && d.createdAt == request.time && d.updatedAt == request.time
-        && d.expiresAt > request.time && d.expiresAt <= request.time + duration.value(15,'m')
-        && d.usedBy == null && d.usedAt == null && d.connectionId == null
-        && memberAvailable(request.auth.uid) && existsAfter(slot)
-        && getAfter(slot).data.inviteCode == code && getAfter(slot).data.status == 'active'
-        && getAfter(slot).data.expiresAt == d.expiresAt;
+      let s = getAfter(/databases/$(database)/documents/connectionInviteSlots/$(request.auth.uid)).data;
+      return signedIn() && isFamily(request.auth.uid) && newInviteData(d, code)
+        && s.familyUid == request.auth.uid && s.inviteCode == code
+        && s.status == 'active' && s.createdAt == request.time;
     }
-    function createSlot(uid) {
+    function rotateSlot(uid) {
       let d = request.resource.data;
-      let invite = /databases/$(database)/documents/connectionInvites/$(d.inviteCode);
-      return signedIn() && isFamily(request.auth.uid) && uid == request.auth.uid
-        && validSlot(d) && d.familyUid == uid && d.status == 'active'
-        && d.createdAt == request.time && d.updatedAt == request.time
-        && d.expiresAt > request.time && d.expiresAt <= request.time + duration.value(15,'m')
-        && d.usedBy == null && d.usedAt == null && d.connectionId == null
-        && memberAvailable(uid) && existsAfter(invite)
-        && getAfter(invite).data.familyUid == uid && getAfter(invite).data.status == 'active'
-        && getAfter(invite).data.expiresAt == d.expiresAt;
+      return signedIn() && request.auth.uid == uid && isFamily(uid)
+        && resource.data.familyUid == uid && d.inviteCode != resource.data.inviteCode
+        && newSlotData(d, uid)
+        && (resource.data.status != 'active'
+          || getAfter(/databases/$(database)/documents/connectionInvites/$(resource.data.inviteCode)).data.status == 'revoked');
     }
-    function updateSlotFamily(uid) {
-      let d = request.resource.data;
-      let newInvite = /databases/$(database)/documents/connectionInvites/$(d.inviteCode);
-      let oldInvite = /databases/$(database)/documents/connectionInvites/$(resource.data.inviteCode);
-      return signedIn() && isFamily(request.auth.uid) && uid == request.auth.uid
-        && resource.data.familyUid == uid && validSlot(d) && d.familyUid == uid
-        && d.inviteCode != resource.data.inviteCode && d.status == 'active'
-        && d.createdAt == request.time && d.updatedAt == request.time
-        && d.expiresAt > request.time && d.expiresAt <= request.time + duration.value(15,'m')
-        && d.usedBy == null && d.usedAt == null && d.connectionId == null
-        && memberAvailable(uid)
-        && (resource.data.status != 'active' || (existsAfter(oldInvite) && getAfter(oldInvite).data.status == 'revoked'))
-        && existsAfter(newInvite) && getAfter(newInvite).data.status == 'active'
-        && getAfter(newInvite).data.familyUid == uid && getAfter(newInvite).data.expiresAt == d.expiresAt;
+    function revokeInvite(code) {
+      let s = getAfter(/databases/$(database)/documents/connectionInviteSlots/$(resource.data.familyUid)).data;
+      return signedIn() && request.auth.uid == resource.data.familyUid && isFamily(request.auth.uid)
+        && resource.data.status == 'active' && request.resource.data.status == 'revoked'
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])
+        && s.familyUid == request.auth.uid && s.inviteCode != code
+        && s.status == 'active' && s.createdAt == request.time;
+    }
+    function consumeFields(d, code) {
+      return d.status == 'used' && d.usedBy == request.auth.uid && d.usedAt == request.time
+        && d.connectionId == code && d.updatedAt == request.time
+        && d.diff(resource.data).affectedKeys().hasOnly(['status','usedBy','usedAt','connectionId','updatedAt']);
+    }
+    function newConnectionFor(code, familyUid) {
+      let c = getAfter(/databases/$(database)/documents/connections/$(code)).data;
+      return c.familyUid == familyUid && c.seniorUid == request.auth.uid
+        && c.status == 'connected' && c.createdAt == request.time;
     }
     function useInvite(code) {
-      let slot = /databases/$(database)/documents/connectionInviteSlots/$(resource.data.familyUid);
-      let conn = /databases/$(database)/documents/connections/$(code);
-      return signedIn() && isSenior(request.auth.uid) && resource.data.status == 'active'
-        && resource.data.expiresAt > request.time && request.resource.data.status == 'used'
-        && request.resource.data.usedBy == request.auth.uid && request.resource.data.usedAt == request.time
-        && request.resource.data.connectionId == code && request.resource.data.updatedAt == request.time
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','usedBy','usedAt','connectionId','updatedAt'])
-        && exists(slot) && get(slot).data.inviteCode == code && get(slot).data.status == 'active'
-        && get(slot).data.expiresAt > request.time && existsAfter(slot)
-        && getAfter(slot).data.status == 'used' && getAfter(slot).data.usedBy == request.auth.uid
-        && existsAfter(conn) && getAfter(conn).data.status == 'connected'
-        && getAfter(conn).data.seniorUid == request.auth.uid;
+      let s = getAfter(/databases/$(database)/documents/connectionInviteSlots/$(resource.data.familyUid)).data;
+      return signedIn() && isSenior(request.auth.uid) && freshInvite(resource.data)
+        && currentInvite(code, resource.data.familyUid)
+        && consumeFields(request.resource.data, code)
+        && s.inviteCode == code && s.status == 'used' && s.usedBy == request.auth.uid
+        && s.connectionId == code && s.usedAt == request.time
+        && newConnectionFor(code, resource.data.familyUid);
     }
     function useSlot(uid) {
-      let invite = /databases/$(database)/documents/connectionInvites/$(resource.data.inviteCode);
-      let conn = /databases/$(database)/documents/connections/$(resource.data.inviteCode);
+      let code = resource.data.inviteCode;
+      let i = getAfter(/databases/$(database)/documents/connectionInvites/$(code)).data;
       return signedIn() && isSenior(request.auth.uid) && resource.data.familyUid == uid
-        && resource.data.status == 'active' && request.resource.data.familyUid == uid
-        && request.resource.data.inviteCode == resource.data.inviteCode
-        && request.resource.data.status == 'used' && request.resource.data.usedBy == request.auth.uid
-        && request.resource.data.usedAt == request.time && request.resource.data.connectionId == resource.data.inviteCode
-        && request.resource.data.updatedAt == request.time
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','usedBy','usedAt','connectionId','updatedAt'])
-        && existsAfter(invite) && getAfter(invite).data.status == 'used'
-        && existsAfter(conn) && getAfter(conn).data.status == 'connected'
-        && getAfter(conn).data.familyUid == uid && getAfter(conn).data.seniorUid == request.auth.uid;
+        && resource.data.status == 'active' && consumeFields(request.resource.data, code)
+        && i.familyUid == uid && i.status == 'used' && i.usedBy == request.auth.uid
+        && i.connectionId == code && i.usedAt == request.time
+        && newConnectionFor(code, uid);
     }
     function createConnection(code) {
       let d = request.resource.data;
-      let invite = /databases/$(database)/documents/connectionInvites/$(code);
-      let slot = /databases/$(database)/documents/connectionInviteSlots/$(d.familyUid);
-      let fm = /databases/$(database)/documents/connectionMembers/$(d.familyUid);
-      let sm = /databases/$(database)/documents/connectionMembers/$(d.seniorUid);
-      return signedIn() && isSenior(request.auth.uid) && validConnection(d,code)
-        && d.seniorUid == request.auth.uid && isFamily(d.familyUid)
+      let i = getAfter(/databases/$(database)/documents/connectionInvites/$(code)).data;
+      let p = getAfter(/databases/$(database)/documents/connectionPairs/$(d.familyUid)/seniors/$(d.seniorUid)).data;
+      return signedIn() && validCode(code) && d.seniorUid == request.auth.uid
+        && d.familyUid != d.seniorUid && isSenior(d.seniorUid) && isFamily(d.familyUid)
+        && d.keys().hasOnly(['familyUid','seniorUid','familyDisplayName','seniorDisplayName','status','createdAt','connectedAt','disconnectedAt','disconnectedBy','updatedAt'])
         && d.familyDisplayName == get(/databases/$(database)/documents/users/$(d.familyUid)).data.displayName
         && d.seniorDisplayName == get(/databases/$(database)/documents/users/$(d.seniorUid)).data.displayName
         && d.status == 'connected' && d.createdAt == request.time && d.connectedAt == request.time
         && d.updatedAt == request.time && d.disconnectedAt == null && d.disconnectedBy == null
-        // Availability is enforced by both connectionMembers writes. Avoid
-        // duplicate reads here so reconnect transactions stay within Rules limits.
-        && exists(invite) && get(invite).data.familyUid == d.familyUid
-        && get(invite).data.status == 'active' && get(invite).data.expiresAt > request.time
-        && exists(slot) && get(slot).data.inviteCode == code && get(slot).data.status == 'active'
-        && existsAfter(invite) && getAfter(invite).data.status == 'used'
-        && getAfter(invite).data.usedBy == request.auth.uid
-        && existsAfter(slot) && getAfter(slot).data.status == 'used'
-        && getAfter(slot).data.usedBy == request.auth.uid
-        && existsAfter(fm) && getAfter(fm).data.connectionId == code
-        && getAfter(fm).data.status == 'connected'
-        && existsAfter(sm) && getAfter(sm).data.connectionId == code
-        && getAfter(sm).data.status == 'connected';
+        && i.familyUid == d.familyUid && i.familyDisplayName == d.familyDisplayName
+        && i.status == 'used' && i.usedBy == d.seniorUid
+        && i.connectionId == code && i.usedAt == request.time
+        && p.connectionId == code && p.status == 'connected' && p.updatedAt == request.time;
     }
-    function createMember(uid,d) {
-      let conn = /databases/$(database)/documents/connections/$(d.connectionId);
-      let famUid = d.role == 'family' ? uid : d.counterpartUid;
-      let invite = /databases/$(database)/documents/connectionInvites/$(d.connectionId);
-      let slot = /databases/$(database)/documents/connectionInviteSlots/$(famUid);
-      return signedIn() && isSenior(request.auth.uid) && validMember(d,uid)
-        && d.status == 'connected' && d.createdAt == request.time && d.updatedAt == request.time
-        && memberAvailable(uid) && existsAfter(conn) && getAfter(conn).data.status == 'connected'
-        && getAfter(conn).data.seniorUid == request.auth.uid
-        && (
-          (uid == getAfter(conn).data.familyUid
-            && d.role == 'family'
-            && d.counterpartUid == getAfter(conn).data.seniorUid
-            && d.counterpartDisplayName == getAfter(conn).data.seniorDisplayName)
-          || (uid == getAfter(conn).data.seniorUid
-            && d.role == 'senior'
-            && d.counterpartUid == getAfter(conn).data.familyUid
-            && d.counterpartDisplayName == getAfter(conn).data.familyDisplayName)
-        )
-        && existsAfter(invite) && getAfter(invite).data.status == 'used'
-        && getAfter(invite).data.usedBy == request.auth.uid
-        && existsAfter(slot) && getAfter(slot).data.status == 'used'
-        && getAfter(slot).data.inviteCode == d.connectionId;
+    function activatePair(familyUid, seniorUid) {
+      let d = request.resource.data;
+      let c = /databases/$(database)/documents/connections/$(d.connectionId);
+      let next = getAfter(c).data;
+      return signedIn() && request.auth.uid == seniorUid && validCode(d.connectionId)
+        && d.keys().hasOnly(['connectionId','status','updatedAt'])
+        && d.status == 'connected' && d.updatedAt == request.time
+        && !exists(c) && next.familyUid == familyUid && next.seniorUid == seniorUid
+        && next.status == 'connected' && next.createdAt == request.time;
     }
     function disconnectConnection(code) {
-      let fm = /databases/$(database)/documents/connectionMembers/$(resource.data.familyUid);
-      let sm = /databases/$(database)/documents/connectionMembers/$(resource.data.seniorUid);
-      return connectionParticipant(resource.data) && resource.data.status == 'connected'
+      let d = resource.data;
+      let p = getAfter(/databases/$(database)/documents/connectionPairs/$(d.familyUid)/seniors/$(d.seniorUid)).data;
+      return participant(d) && d.status == 'connected'
         && request.resource.data.status == 'disconnected'
         && request.resource.data.disconnectedAt == request.time
         && request.resource.data.disconnectedBy == request.auth.uid
         && request.resource.data.updatedAt == request.time
-        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','disconnectedAt','disconnectedBy','updatedAt'])
-        && existsAfter(fm) && getAfter(fm).data.status == 'disconnected'
-        && getAfter(fm).data.connectionId == code
-        && existsAfter(sm) && getAfter(sm).data.status == 'disconnected'
-        && getAfter(sm).data.connectionId == code;
+        && request.resource.data.diff(d).affectedKeys().hasOnly(['status','disconnectedAt','disconnectedBy','updatedAt'])
+        && p.connectionId == code && p.status == 'disconnected' && p.updatedAt == request.time;
     }
-    function disconnectMember(uid) {
-      let conn = /databases/$(database)/documents/connections/$(resource.data.connectionId);
-      return signedIn() && resource.data.status == 'connected'
-        && request.resource.data.status == 'disconnected'
+    function disconnectPair(familyUid, seniorUid) {
+      let c = getAfter(/databases/$(database)/documents/connections/$(resource.data.connectionId)).data;
+      return participant(c) && c.familyUid == familyUid && c.seniorUid == seniorUid
+        && resource.data.status == 'connected' && request.resource.data.status == 'disconnected'
         && request.resource.data.updatedAt == request.time
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt'])
-        && existsAfter(conn) && getAfter(conn).data.status == 'disconnected'
-        && getAfter(conn).data.disconnectedBy == request.auth.uid
-        && ((uid == getAfter(conn).data.familyUid && resource.data.role == 'family' && resource.data.counterpartUid == getAfter(conn).data.seniorUid)
-          || (uid == getAfter(conn).data.seniorUid && resource.data.role == 'senior' && resource.data.counterpartUid == getAfter(conn).data.familyUid));
+        && c.status == 'disconnected' && c.disconnectedBy == request.auth.uid
+        && c.disconnectedAt == request.time;
     }
 
     // Migration 2.3 profile surface. `get` deliberately
@@ -727,40 +660,38 @@ service cloud.firestore {
     }
 
 
+
     match /connectionInvites/{code} {
       allow get: if signedIn() && ((resource.data.familyUid == request.auth.uid && isFamily(request.auth.uid))
-        || (isSenior(request.auth.uid) && resource.data.status == 'active'
-          && exists(/databases/$(database)/documents/connectionInviteSlots/$(resource.data.familyUid))
-          && get(/databases/$(database)/documents/connectionInviteSlots/$(resource.data.familyUid)).data.inviteCode == code));
-      allow list: if false;
+        || (isSenior(request.auth.uid) && freshInvite(resource.data)
+          && currentInvite(code, resource.data.familyUid)));
+      allow list, delete: if false;
       allow create: if createInvite(code);
-      allow update: if (signedIn() && isFamily(request.auth.uid)
-          && resource.data.familyUid == request.auth.uid && resource.data.status == 'active'
-          && request.resource.data.status == 'revoked' && request.resource.data.updatedAt == request.time
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status','updatedAt']))
-        || useInvite(code);
-      allow delete: if false;
+      allow update: if revokeInvite(code) || useInvite(code);
     }
     match /connectionInviteSlots/{uid} {
-      allow get: if signedIn() && request.auth.uid == uid && isFamily(uid);
-      allow list: if false;
-      allow create: if createSlot(uid);
-      allow update: if updateSlotFamily(uid) || useSlot(uid);
-      allow delete: if false;
+      allow get: if ownsUser(uid) && isFamily(uid);
+      allow list, delete: if false;
+      allow create: if ownsUser(uid) && isFamily(uid) && newSlotData(request.resource.data, uid);
+      allow update: if rotateSlot(uid) || useSlot(uid);
     }
     match /connections/{code} {
-      allow get: if connectionParticipant(resource.data);
-      allow list: if false;
+      // List queries must constrain the caller's own familyUid or seniorUid.
+      allow get, list: if participant(resource.data);
       allow create: if createConnection(code);
       allow update: if disconnectConnection(code);
       allow delete: if false;
     }
-    match /connectionMembers/{uid} {
-      allow get: if signedIn() && request.auth.uid == uid;
-      allow list: if false;
-      allow create: if createMember(uid,request.resource.data);
-      allow update: if createMember(uid,request.resource.data) || disconnectMember(uid);
-      allow delete: if false;
+    match /connectionPairs/{familyUid}/seniors/{seniorUid} {
+      allow get: if signedIn() && (request.auth.uid == familyUid || request.auth.uid == seniorUid);
+      allow list, delete: if false;
+      allow create: if activatePair(familyUid, seniorUid);
+      allow update: if (resource.data.status == 'disconnected' && activatePair(familyUid, seniorUid))
+        || disconnectPair(familyUid, seniorUid);
+    }
+    // The unshipped one-to-one index is not used or accessible.
+    match /connectionMembers/{document=**} {
+      allow read, write: if false;
     }
 
     // M3.2: an elderly owner may access only their own medication records.
