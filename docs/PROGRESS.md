@@ -90,13 +90,13 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 ## Phase 04 — Medication Management (policy revision in progress)
 
 - Started from Phase 03 merge commit 3afd62f on feature/phase-04-medication-management.
-- Preserved the existing medication collection path \`elderlyProfiles/{seniorUid}/medications\` and legacy M3.2/M3.3/M3.4 references. No migration or deletion.
+- Preserved the existing medication collection path `elderlyProfiles/{seniorUid}/medications` and legacy M3.2/M3.3/M3.4 references. No migration or deletion.
 - Original Phase 04 medication form, Firestore service, status handling, soft-delete and date picker remain in place.
 - Owner-approved business policy (27/11/2026): the elderly owner alone directly creates, edits, stops and soft-deletes official medication records. A connected caregiver is read-only for the official medication list; they can submit create/update/stop/delete proposals and append intake logs, but cannot directly write medications or approve proposals.
-- Added \`medicationRequests\` subcollection for caregiver proposals. The elderly owner can approve/reject; client approval applies the medication change and request status in one Firestore transaction. Caregiver reads only their own requests while the connection remains active.
-- Added append-only \`medicationIntakeLogs\` subcollection. The elderly owner and connected caregiver can record and read medication intake; no client can update/delete a log.
+- Added `medicationRequests` subcollection for caregiver proposals. The elderly owner can approve/reject; client approval applies the medication change and request status in one Firestore transaction. Caregiver reads only their own requests while the connection remains active.
+- Added append-only `medicationIntakeLogs` subcollection. The elderly owner and connected caregiver can record and read medication intake; no client can update/delete a log.
 - Firestore Emulator Rules now allow medication reads to the owner and active caregiver but restrict medication create/update to the owner. Requests, review decisions, intake logs, and connection revocation have dedicated Rules. Caregiver access is revoked after disconnect.
-- Legal-representative authority is separate from family connection. Phase 04 does not grant this authority; \`legalRepresentativeAuthorizations\` is explicitly default-deny until an approved identity/evidence verification, grant, scope, expiry and revocation process exists.
+- Legal-representative authority is separate from family connection. Phase 04 does not grant this authority; `legalRepresentativeAuthorizations` is explicitly default-deny until an approved identity/evidence verification, grant, scope, expiry and revocation process exists.
 - Added [PHASE-04-MEDICATION-POLICY.md](PHASE-04-MEDICATION-POLICY.md) and aligned PROJECT_SCOPE.md with the approved permission matrix.
 - Updated Rules integration tests: owner CRUD; caregiver read-only medication access; caregiver proposal create/read; caregiver cannot mutate medication or approve; owner can review; both roles can append immutable intake logs; strangers/disconnected caregivers denied; representative authority is not inferred from connection.
 - [ ] Run GitHub Actions after the policy implementation and resolve any TypeScript, ESLint, Unit, Auth Emulator, Firestore Rules Emulator or Expo Doctor failures.
