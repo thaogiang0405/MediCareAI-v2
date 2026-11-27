@@ -473,6 +473,25 @@ function medicationIntakeLogData(ownerUid, medicationId, medicationName, actorUi
   };
 }
 
+function medicationNotificationData(
+  ownerUid, eventType, medicationId, medicationName,
+  actorUid, actorName, actorRole, requestId = null, requestType = null, decision = null,
+) {
+  return {
+    ownerUid,
+    eventType,
+    medicationId,
+    medicationName,
+    actorUid,
+    actorName,
+    actorRole,
+    requestId,
+    requestType,
+    decision,
+    createdAt: serverTimestamp(),
+  };
+}
+
 test("Phase 04: connected caregiver can read medications and submit proposals, but cannot mutate the official list", async () => {
   await seedUsers();
   await assertSucceeds(issue("f1", "ABCD2345"));
@@ -628,6 +647,92 @@ test("Phase 04: owner approval applies a caregiver proposal atomically; rejectio
     reviewNote: "Không đồng ý.",
   }));
   assertEqual((await assertSucceeds(getDoc(medicationRef))).data().dosage, "2");
+});
+
+test("Phase 04: caregiver proposals create shared notifications for the owner and every connected caregiver", async () => {
+  await seedUsers();
+  await assertSucceeds(issue("f1", "ABCD2345"));
+  await assertSucceeds(connect("f1", "s1", "ABCD2345"));
+  await assertSucceeds(issue("f2", "EFGH6789"));
+  await assertSucceeds(connect("f2", "s1", "EFGH6789"));
+
+  const senior = db("s1");
+  const caregiverOne = db("f1");
+  const caregiverTwo = db("f2");
+  const requestRef = doc(caregiverOne, "elderlyProfiles", "s1", "medicationRequests", "request-notify");
+  const ownerNotificationRef = doc(senior, "elderlyProfiles", "s1", "medicationNotifications", "proposal-request-notify");
+  const caregiverNotificationRef = doc(caregiverTwo, "elderlyProfiles", "s1", "medicationNotifications", "proposal-request-notify");
+  const batch = writeBatch(caregiverOne);
+  batch.set(requestRef, medicationRequestData("s1", "f1", "create", null));
+  batch.set(doc(caregiverOne, "elderlyProfiles", "s1", "medicationNotifications", "proposal-request-notify"),
+    medicationNotificationData("s1", "proposal_submitted", null, "Paracetamol", "f1", names.f1, "caregiver", "request-notify", "create"));
+  await assertSucceeds(batch.commit());
+
+  await assertSucceeds(getDoc(ownerNotificationRef));
+  await assertSucceeds(getDoc(caregiverNotificationRef));
+  await assertSucceeds(getDocs(collection(caregiverTwo, "elderlyProfiles", "s1", "medicationNotifications")));
+  await assertFails(getDoc(doc(caregiverTwo, "elderlyProfiles", "s1", "medicationRequests", "request-notify")));
+  await assertFails(getDocs(collection(db("s3"), "elderlyProfiles", "s1", "medicationNotifications")));
+
+  const fakeBatch = writeBatch(caregiverTwo);
+  fakeBatch.set(
+    doc(caregiverTwo, "elderlyProfiles", "s1", "medicationNotifications", "forged-proposal"),
+    medicationNotificationData("s1", "proposal_submitted", null, "Thuốc giả", "f2", names.f2, "caregiver", "missing-request", "create"),
+  );
+  await assertFails(fakeBatch.commit());
+
+  await assertSucceeds(disconnect("f1", "s1", "ABCD2345", "s1"));
+  await assertFails(getDoc(doc(caregiverOne, "elderlyProfiles", "s1", "medicationNotifications", "proposal-request-notify")));
+});
+
+test("Phase 04: senior stop and reactivation create shared status history notifications", async () => {
+  await seedUsers();
+  await assertSucceeds(issue("f1", "ABCD2345"));
+  await assertSucceeds(connect("f1", "s1", "ABCD2345"));
+  await assertSucceeds(issue("f2", "EFGH6789"));
+  await assertSucceeds(connect("f2", "s1", "EFGH6789"));
+
+  const senior = db("s1");
+  const caregiverOne = db("f1");
+  const caregiverTwo = db("f2");
+  const medicationRef = doc(senior, "elderlyProfiles", "s1", "medications", "med-1");
+  await assertSucceeds(setDoc(medicationRef, medicationData("s1", "s1")));
+
+  const stopBatch = writeBatch(senior);
+  stopBatch.update(medicationRef, {
+    status: "inactive",
+    deletedAt: null,
+    updatedByUid: "s1",
+    updatedAt: serverTimestamp(),
+    revision: 2,
+  });
+  stopBatch.set(
+    doc(senior, "elderlyProfiles", "s1", "medicationNotifications", "stop-med-1"),
+    medicationNotificationData("s1", "medication_stopped", "med-1", "Paracetamol", "s1", names.s1, "elderly"),
+  );
+  await assertSucceeds(stopBatch.commit());
+  await assertSucceeds(getDoc(doc(caregiverOne, "elderlyProfiles", "s1", "medicationNotifications", "stop-med-1")));
+  await assertSucceeds(getDoc(doc(caregiverTwo, "elderlyProfiles", "s1", "medicationNotifications", "stop-med-1")));
+
+  const restoreBatch = writeBatch(senior);
+  restoreBatch.update(medicationRef, {
+    status: "active",
+    deletedAt: null,
+    updatedByUid: "s1",
+    updatedAt: serverTimestamp(),
+    revision: 3,
+  });
+  restoreBatch.set(
+    doc(senior, "elderlyProfiles", "s1", "medicationNotifications", "restore-med-1"),
+    medicationNotificationData("s1", "medication_reactivated", "med-1", "Paracetamol", "s1", names.s1, "elderly"),
+  );
+  await assertSucceeds(restoreBatch.commit());
+  await assertSucceeds(getDoc(doc(caregiverOne, "elderlyProfiles", "s1", "medicationNotifications", "restore-med-1")));
+  await assertSucceeds(getDoc(doc(caregiverTwo, "elderlyProfiles", "s1", "medicationNotifications", "restore-med-1")));
+
+  const events = await assertSucceeds(getDocs(collection(senior, "elderlyProfiles", "s1", "medicationNotifications")));
+  assertEqual(events.size, 2);
+  assertEqual((await assertSucceeds(getDoc(medicationRef))).data().status, "active");
 });
 
 test("Phase 04: connected caregiver and senior can append immutable medication intake logs", async () => {
