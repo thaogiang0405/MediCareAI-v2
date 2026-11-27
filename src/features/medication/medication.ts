@@ -11,6 +11,7 @@ import {
   runTransaction,
   serverTimestamp,
   where,
+  writeBatch,
   type Timestamp,
   type Unsubscribe,
 } from "firebase/firestore";
@@ -21,6 +22,12 @@ import { medicationValidationError, type MedicationDraft } from "./validation";
 export type MedicationStatus = "active" | "inactive" | "deleted";
 export type MedicationRequestType = "create" | "update" | "stop" | "delete";
 export type MedicationRequestStatus = "pending" | "approved" | "rejected";
+export type MedicationNotificationType =
+  | "proposal_submitted"
+  | "proposal_reviewed"
+  | "medication_stopped"
+  | "medication_reactivated";
+export type MedicationNotificationDecision = "approved" | "rejected" | null;
 
 export type MedicationRecord = MedicationDraft & {
   id: string;
@@ -63,6 +70,21 @@ export type MedicationIntakeLogRecord = {
   createdAt: Timestamp | null;
 };
 
+export type MedicationNotificationRecord = {
+  id: string;
+  ownerUid: string;
+  eventType: MedicationNotificationType;
+  medicationId: string | null;
+  medicationName: string;
+  actorUid: string;
+  actorName: string;
+  actorRole: "elderly" | "caregiver";
+  requestId: string | null;
+  requestType: MedicationRequestType | null;
+  decision: MedicationNotificationDecision;
+  createdAt: Timestamp | null;
+};
+
 function database() {
   if (!services) throw new Error("firebase-unavailable");
   return services.db;
@@ -101,6 +123,35 @@ function requestCollection(seniorUid: string) {
 
 function intakeCollection(seniorUid: string) {
   return collection(database(), "elderlyProfiles", seniorUid, "medicationIntakeLogs");
+}
+
+function notificationCollection(seniorUid: string) {
+  return collection(database(), "elderlyProfiles", seniorUid, "medicationNotifications");
+}
+
+function notificationData(
+  seniorUid: string,
+  profile: Profile,
+  eventType: MedicationNotificationType,
+  medicationId: string | null,
+  medicationName: string,
+  requestId: string | null = null,
+  requestType: MedicationRequestType | null = null,
+  decision: MedicationNotificationDecision = null,
+) {
+  return {
+    ownerUid: seniorUid,
+    eventType,
+    medicationId,
+    medicationName: medicationName.trim().slice(0, 120),
+    actorUid: profile.uid,
+    actorName: profile.fullName.trim().slice(0, 80),
+    actorRole: profile.role === "senior" ? "elderly" : "caregiver",
+    requestId,
+    requestType,
+    decision,
+    createdAt: serverTimestamp(),
+  };
 }
 
 function toRecord(id: string, data: Record<string, unknown>): MedicationRecord {
@@ -177,6 +228,34 @@ function toIntakeLog(id: string, data: Record<string, unknown>): MedicationIntak
   };
 }
 
+function toNotification(id: string, data: Record<string, unknown>): MedicationNotificationRecord {
+  const eventType: MedicationNotificationType =
+    data.eventType === "proposal_reviewed"
+    || data.eventType === "medication_stopped"
+    || data.eventType === "medication_reactivated"
+      ? data.eventType
+      : "proposal_submitted";
+  const requestType: MedicationRequestType | null =
+    data.requestType === "create" || data.requestType === "update"
+    || data.requestType === "stop" || data.requestType === "delete"
+      ? data.requestType
+      : null;
+  return {
+    id,
+    ownerUid: typeof data.ownerUid === "string" ? data.ownerUid : "",
+    eventType,
+    medicationId: typeof data.medicationId === "string" ? data.medicationId : null,
+    medicationName: typeof data.medicationName === "string" ? data.medicationName : "Thuốc",
+    actorUid: typeof data.actorUid === "string" ? data.actorUid : "",
+    actorName: typeof data.actorName === "string" ? data.actorName : "Người dùng",
+    actorRole: data.actorRole === "caregiver" ? "caregiver" : "elderly",
+    requestId: typeof data.requestId === "string" ? data.requestId : null,
+    requestType,
+    decision: data.decision === "approved" || data.decision === "rejected" ? data.decision : null,
+    createdAt: (data.createdAt as Timestamp | undefined) ?? null,
+  };
+}
+
 export function watchMedications(
   seniorUid: string,
   onValue: (medications: MedicationRecord[]) => void,
@@ -222,6 +301,18 @@ export function watchMedicationIntakeLogs(
   }, onError);
 }
 
+export function watchMedicationNotifications(
+  seniorUid: string,
+  onValue: (notifications: MedicationNotificationRecord[]) => void,
+  onError: (error: Error) => void,
+): Unsubscribe {
+  const source = query(notificationCollection(seniorUid), orderBy("createdAt", "desc"), limit(30));
+  return onSnapshot(source, { includeMetadataChanges: true }, snapshot => {
+    if (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) return;
+    onValue(snapshot.docs.map(item => toNotification(item.id, item.data())));
+  }, onError);
+}
+
 export async function createMedication(
   user: User,
   profile: Profile,
@@ -249,6 +340,8 @@ async function updateMedicationRecord(
   medication: MedicationRecord,
   changes: Partial<MedicationDraft>,
   status: MedicationStatus,
+  notificationType: "medication_stopped" | "medication_reactivated" | null = null,
+  expectedCurrentStatus: MedicationStatus | null = null,
 ) {
   assertSeniorOwner(user, profile, seniorUid);
   const ref = doc(database(), "elderlyProfiles", seniorUid, "medications", medication.id);
@@ -256,7 +349,11 @@ async function updateMedicationRecord(
     const snapshot = await transaction.get(ref);
     if (!snapshot.exists()) throw new Error("not-found");
     const current = snapshot.data();
-    if (current.ownerUid !== seniorUid || current.status === "deleted") {
+    if (
+      current.ownerUid !== seniorUid
+      || current.status === "deleted"
+      || (expectedCurrentStatus !== null && current.status !== expectedCurrentStatus)
+    ) {
       throw new Error("not-editable");
     }
     // Preserve the legacy M3.2 document path and upgrade its fields on the first edit.
@@ -286,6 +383,12 @@ async function updateMedicationRecord(
       updatedAt: serverTimestamp(),
       revision: (typeof current.revision === "number" ? current.revision : 1) + 1,
     });
+    if (notificationType) {
+      const notificationRef = doc(notificationCollection(seniorUid));
+      transaction.set(notificationRef, notificationData(
+        seniorUid, profile, notificationType, medication.id, medication.name,
+      ));
+    }
   });
 }
 
@@ -310,7 +413,22 @@ export async function stopMedication(
   seniorUid: string,
   medication: MedicationRecord,
 ) {
-  await updateMedicationRecord(user, profile, seniorUid, medication, {}, "inactive");
+  if (medication.status !== "active") throw new Error("not-editable");
+  await updateMedicationRecord(
+    user, profile, seniorUid, medication, {}, "inactive", "medication_stopped", "active",
+  );
+}
+
+export async function reactivateMedication(
+  user: User,
+  profile: Profile,
+  seniorUid: string,
+  medication: MedicationRecord,
+) {
+  if (medication.status !== "inactive") throw new Error("not-editable");
+  await updateMedicationRecord(
+    user, profile, seniorUid, medication, {}, "active", "medication_reactivated", "inactive",
+  );
 }
 
 export async function deleteMedication(
@@ -353,10 +471,15 @@ export async function createMedicationRequest(
       throw new Error("not-editable");
     }
   }
-  await addDoc(requestCollection(seniorUid), {
+  const db = database();
+  const requestRef = doc(requestCollection(seniorUid));
+  const notificationRef = doc(notificationCollection(seniorUid));
+  const normalizedName = medicationName.trim().slice(0, 120);
+  const batch = writeBatch(db);
+  batch.set(requestRef, {
     ownerUid: seniorUid,
     medicationId,
-    medicationName: medicationName.trim().slice(0, 120),
+    medicationName: normalizedName,
     requestType,
     proposedData,
     requestedByUid: user.uid,
@@ -368,6 +491,10 @@ export async function createMedicationRequest(
     reviewedAt: null,
     reviewNote: "",
   });
+  batch.set(notificationRef, notificationData(
+    seniorUid, profile, "proposal_submitted", medicationId, normalizedName, requestRef.id, requestType,
+  ));
+  await batch.commit();
 }
 
 export async function reviewMedicationRequest(
@@ -484,6 +611,17 @@ export async function reviewMedicationRequest(
       updatedAt: serverTimestamp(),
       reviewNote: reviewNote.trim().slice(0, 500),
     });
+    const notificationRef = doc(notificationCollection(seniorUid));
+    transaction.set(notificationRef, notificationData(
+      seniorUid,
+      profile,
+      "proposal_reviewed",
+      currentRequest.medicationId,
+      currentRequest.medicationName,
+      currentRequest.id,
+      currentRequest.requestType,
+      decision,
+    ));
   });
 }
 
@@ -514,7 +652,7 @@ export function medicationErrorMessage(error: unknown): string {
     : (error instanceof Error ? error.message : "");
   switch (code) {
     case "permission-denied":
-      return "Bạn không có quyền thực hiện thao tác này. Người chăm sóc chỉ được xem thuốc, ghi nhận uống thuốc và gửi đề xuất.";
+      return "Firebase từ chối thao tác. Có thể Firestore Rules Phase 04 chưa được Publish lên staging. Hãy kiểm tra Rules trước khi thử lại; người chăm sóc không được sửa trực tiếp danh sách thuốc.";
     case "unavailable":
     case "deadline-exceeded":
     case "firebase-unavailable":
