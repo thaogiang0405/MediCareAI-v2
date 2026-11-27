@@ -241,12 +241,16 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
       {
         text: family ? "Gửi đề xuất" : "Ngừng sử dụng",
         style: "destructive",
-        onPress: () => void perform(
-          () => family
-            ? createMedicationRequest(user, profile, selectedSeniorUid, "stop", item.id, item.name, null, "Đề xuất ngừng sử dụng thuốc.")
-            : stopMedication(user, profile, selectedSeniorUid, item),
-          family ? "Đã gửi đề xuất ngừng thuốc và thông báo cho gia đình." : "Đã ngừng sử dụng thuốc và thông báo cho những người chăm sóc đang kết nối.",
-        ),
+        onPress: () => void perform(async () => {
+          if (family) {
+            await createMedicationRequest(user, profile, selectedSeniorUid, "stop", item.id, item.name, null, "Đề xuất ngừng sử dụng thuốc.");
+          } else {
+            await stopMedication(user, profile, selectedSeniorUid, item);
+            setTab("inactive");
+          }
+        }, family
+          ? "Đã gửi đề xuất ngừng thuốc và thông báo cho gia đình."
+          : "Đã ngừng sử dụng thuốc và thông báo cho những người chăm sóc đang kết nối."),
       },
     ]);
   }
@@ -261,6 +265,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
           text: "Sử dụng lại",
           onPress: () => void perform(async () => {
             await reactivateMedication(user, profile, selectedSeniorUid, item);
+            setTab("active");
             if (closeEditor) setEditor(false);
           }, "Đã khôi phục thuốc và gửi thông báo cho người chăm sóc."),
         },
