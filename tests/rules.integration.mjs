@@ -425,28 +425,170 @@ test("Phase 04: senior can create, update and soft-delete a medication", async (
   await assertFails(deleteDoc(ref));
 });
 
-test("Phase 04: connected caregiver can manage medication, access is revoked after disconnect", async () => {
+function medicationProposal(overrides = {}) {
+  return {
+    name: "Paracetamol",
+    strengthText: "500 mg",
+    dosage: "1",
+    dosageUnit: "viên",
+    dosageForm: "tablet",
+    frequency: 2,
+    intakeTimes: ["08:30", "20:00"],
+    directionsText: "Theo chỉ định chuyên môn.",
+    startDate: "2026-11-27",
+    endDate: "",
+    notes: "",
+    ...overrides,
+  };
+}
+
+function medicationRequestData(ownerUid, requestedByUid, requestType = "update", medicationId = "med-1") {
+  return {
+    ownerUid,
+    medicationId: requestType === "create" ? null : medicationId,
+    requestType,
+    proposedData: requestType === "create" || requestType === "update" ? medicationProposal() : null,
+    requestedByUid,
+    reason: "Đề xuất hỗ trợ cập nhật thông tin theo đơn.",
+    status: "pending",
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    reviewedByUid: null,
+    reviewedAt: null,
+    reviewNote: "",
+  };
+}
+
+function medicationIntakeLogData(ownerUid, medicationId, medicationName, actorUid, actorRole) {
+  return {
+    ownerUid,
+    medicationId,
+    medicationName,
+    recordedByUid: actorUid,
+    recordedByRole: actorRole,
+    takenAt: serverTimestamp(),
+    note: "Đã ghi nhận uống thuốc.",
+    createdAt: serverTimestamp(),
+  };
+}
+
+test("Phase 04: connected caregiver can read medications and submit proposals, but cannot mutate the official list", async () => {
   await seedUsers();
   await assertSucceeds(issue("f1", "ABCD2345"));
   await assertSucceeds(connect("f1", "s1", "ABCD2345"));
+
+  const senior = db("s1");
   const caregiver = db("f1");
-  const ref = doc(caregiver, "elderlyProfiles", "s1", "medications", "med-1");
-  await assertSucceeds(setDoc(ref, medicationData("s1", "f1")));
-  await assertSucceeds(updateDoc(ref, {
-    notes: "Đã kiểm tra với gia đình.",
+  const medicationRef = doc(senior, "elderlyProfiles", "s1", "medications", "med-1");
+  await assertSucceeds(setDoc(medicationRef, medicationData("s1", "s1")));
+
+  const caregiverMedicationRef = doc(caregiver, "elderlyProfiles", "s1", "medications", "med-1");
+  await assertSucceeds(getDoc(caregiverMedicationRef));
+  await assertSucceeds(getDocs(collection(caregiver, "elderlyProfiles", "s1", "medications")));
+
+  await assertFails(setDoc(
+    doc(caregiver, "elderlyProfiles", "s1", "medications", "caregiver-created"),
+    medicationData("s1", "f1"),
+  ));
+  await assertFails(updateDoc(caregiverMedicationRef, {
+    notes: "Người chăm sóc tự sửa trái phép.",
     updatedByUid: "f1",
     updatedAt: serverTimestamp(),
     revision: 2,
   }));
+  await assertFails(deleteDoc(caregiverMedicationRef));
+
+  const requestRef = doc(caregiver, "elderlyProfiles", "s1", "medicationRequests", "request-1");
+  await assertSucceeds(setDoc(requestRef, medicationRequestData("s1", "f1")));
+  await assertSucceeds(getDoc(requestRef));
+  await assertSucceeds(getDocs(query(
+    collection(caregiver, "elderlyProfiles", "s1", "medicationRequests"),
+    where("requestedByUid", "==", "f1"),
+  )));
+  await assertFails(updateDoc(requestRef, {
+    status: "approved",
+    reviewedByUid: "f1",
+    reviewedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    reviewNote: "",
+  }));
+
+  const ownerRequestRef = doc(senior, "elderlyProfiles", "s1", "medicationRequests", "request-1");
+  await assertSucceeds(getDoc(ownerRequestRef));
+  await assertSucceeds(getDocs(query(
+    collection(senior, "elderlyProfiles", "s1", "medicationRequests"),
+    where("ownerUid", "==", "s1"),
+  )));
+  await assertSucceeds(updateDoc(ownerRequestRef, {
+    status: "approved",
+    reviewedByUid: "s1",
+    reviewedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    reviewNote: "Đã xem và đồng ý.",
+  }));
+
   await assertFails(getDoc(doc(db("f2"), "elderlyProfiles", "s1", "medications", "med-1")));
   await assertSucceeds(disconnect("f1", "s1", "ABCD2345", "f1"));
-  await assertFails(getDoc(ref));
-  await assertFails(updateDoc(ref, {
-    status: "deleted",
-    deletedAt: serverTimestamp(),
-    updatedByUid: "f1",
-    updatedAt: serverTimestamp(),
-    revision: 3,
+  await assertFails(getDoc(caregiverMedicationRef));
+  await assertFails(getDoc(requestRef));
+  await assertFails(setDoc(
+    doc(caregiver, "elderlyProfiles", "s1", "medicationRequests", "after-disconnect"),
+    medicationRequestData("s1", "f1", "create", null),
+  ));
+});
+
+test("Phase 04: connected caregiver and senior can append immutable medication intake logs", async () => {
+  await seedUsers();
+  await assertSucceeds(issue("f1", "ABCD2345"));
+  await assertSucceeds(connect("f1", "s1", "ABCD2345"));
+
+  const senior = db("s1");
+  const caregiver = db("f1");
+  const medicationRef = doc(senior, "elderlyProfiles", "s1", "medications", "med-1");
+  await assertSucceeds(setDoc(medicationRef, medicationData("s1", "s1")));
+
+  const seniorLogRef = doc(senior, "elderlyProfiles", "s1", "medicationIntakeLogs", "senior-log");
+  const caregiverLogRef = doc(caregiver, "elderlyProfiles", "s1", "medicationIntakeLogs", "caregiver-log");
+  await assertSucceeds(setDoc(seniorLogRef, medicationIntakeLogData("s1", "med-1", "Paracetamol", "s1", "elderly")));
+  await assertSucceeds(setDoc(caregiverLogRef, medicationIntakeLogData("s1", "med-1", "Paracetamol", "f1", "caregiver")));
+
+  await assertSucceeds(getDoc(seniorLogRef));
+  await assertSucceeds(getDoc(doc(senior, "elderlyProfiles", "s1", "medicationIntakeLogs", "caregiver-log")));
+  await assertSucceeds(getDocs(query(
+    collection(caregiver, "elderlyProfiles", "s1", "medicationIntakeLogs"),
+  )));
+  await assertFails(updateDoc(caregiverLogRef, { note: "Sửa lịch sử." }));
+  await assertFails(deleteDoc(caregiverLogRef));
+  await assertFails(setDoc(
+    doc(db("f2"), "elderlyProfiles", "s1", "medicationIntakeLogs", "stranger-log"),
+    medicationIntakeLogData("s1", "med-1", "Paracetamol", "f2", "caregiver"),
+  ));
+
+  await assertSucceeds(disconnect("f1", "s1", "ABCD2345", "s1"));
+  await assertFails(setDoc(
+    doc(caregiver, "elderlyProfiles", "s1", "medicationIntakeLogs", "after-disconnect"),
+    medicationIntakeLogData("s1", "med-1", "Paracetamol", "f1", "caregiver"),
+  ));
+  await assertFails(getDocs(query(
+    collection(caregiver, "elderlyProfiles", "s1", "medicationIntakeLogs"),
+  )));
+});
+
+test("Phase 04: legal representative permissions are not inferred from family connection", async () => {
+  await seedUsers();
+  await assertSucceeds(issue("f1", "ABCD2345"));
+  await assertSucceeds(connect("f1", "s1", "ABCD2345"));
+  const caregiver = db("f1");
+  const authorizationRef = doc(
+    caregiver,
+    "elderlyProfiles", "s1", "legalRepresentativeAuthorizations", "authorization-1",
+  );
+  await assertFails(getDoc(authorizationRef));
+  await assertFails(setDoc(authorizationRef, {
+    ownerUid: "s1",
+    representativeUid: "f1",
+    verificationStatus: "verified",
+    grantedAt: serverTimestamp(),
   }));
 });
 
