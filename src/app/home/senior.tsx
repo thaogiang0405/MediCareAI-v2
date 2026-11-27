@@ -8,7 +8,6 @@ import MedicationPanel from "@/features/medication/MedicationPanel";
 
 const features = [
   {
-  {
     symbol: "♡",
     title: "Sức khỏe",
     description: "Theo dõi các chỉ số cơ thể.",
