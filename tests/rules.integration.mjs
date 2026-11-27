@@ -371,3 +371,93 @@ test("partial connection or invite writes cannot bypass atomic workflow", async 
   await assertFails(updateDoc(inviteRef(db("s1"),"ABCD2345"),consumed("s1","ABCD2345")));
   await assertFails(setDoc(pairRef(db("s1"),"f1","s1"),{connectionId:"ABCD2345",status:"connected",updatedAt:serverTimestamp()}));
 });
+
+
+function medicationData(uid, actor) {
+  return {
+    ownerUid: uid,
+    name: "Paracetamol",
+    strengthText: "500 mg",
+    dosage: "1",
+    dosageUnit: "viên",
+    dosageForm: "tablet",
+    frequency: 2,
+    intakeTimes: ["08:30", "20:00"],
+    directionsText: "Theo chỉ định của bác sĩ.",
+    startDate: "2026-11-27",
+    endDate: "",
+    notes: "",
+    status: "active",
+    createdByUid: actor,
+    updatedByUid: actor,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    deletedAt: null,
+    revision: 1,
+  };
+}
+
+test("Phase 04: senior can create, update and soft-delete a medication", async () => {
+  await seedUsers();
+  const store = db("s1");
+  const ref = doc(store, "elderlyProfiles", "s1", "medications", "med-1");
+  await assertSucceeds(setDoc(ref, medicationData("s1", "s1")));
+  await assertSucceeds(updateDoc(ref, {
+    dosage: "2",
+    updatedByUid: "s1",
+    updatedAt: serverTimestamp(),
+    revision: 2,
+  }));
+  await assertSucceeds(updateDoc(ref, {
+    status: "deleted",
+    deletedAt: serverTimestamp(),
+    updatedByUid: "s1",
+    updatedAt: serverTimestamp(),
+    revision: 3,
+  }));
+  await assertFails(updateDoc(ref, {
+    status: "active",
+    deletedAt: null,
+    updatedByUid: "s1",
+    updatedAt: serverTimestamp(),
+    revision: 4,
+  }));
+  await assertFails(deleteDoc(ref));
+});
+
+test("Phase 04: connected caregiver can manage medication, access is revoked after disconnect", async () => {
+  await seedUsers();
+  await assertSucceeds(issue("f1", "ABCD2345"));
+  await assertSucceeds(connect("f1", "s1", "ABCD2345"));
+  const caregiver = db("f1");
+  const ref = doc(caregiver, "elderlyProfiles", "s1", "medications", "med-1");
+  await assertSucceeds(setDoc(ref, medicationData("s1", "f1")));
+  await assertSucceeds(updateDoc(ref, {
+    notes: "Đã kiểm tra với gia đình.",
+    updatedByUid: "f1",
+    updatedAt: serverTimestamp(),
+    revision: 2,
+  }));
+  await assertFails(getDoc(doc(db("f2"), "elderlyProfiles", "s1", "medications", "med-1")));
+  await assertSucceeds(disconnect("f1", "s1", "ABCD2345", "f1"));
+  await assertFails(getDoc(ref));
+  await assertFails(updateDoc(ref, {
+    status: "deleted",
+    deletedAt: serverTimestamp(),
+    updatedByUid: "f1",
+    updatedAt: serverTimestamp(),
+    revision: 3,
+  }));
+});
+
+test("Phase 04: invalid medication schema and cross-owner writes are denied", async () => {
+  await seedUsers();
+  const store = db("s1");
+  const invalid = medicationData("s1", "s1");
+  invalid.frequency = 3;
+  await assertFails(setDoc(doc(store, "elderlyProfiles", "s1", "medications", "bad-1"), invalid));
+  await assertFails(setDoc(
+    doc(store, "elderlyProfiles", "s2", "medications", "bad-2"),
+    medicationData("s2", "s1"),
+  ));
+});
