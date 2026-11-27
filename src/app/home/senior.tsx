@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { colors } from "@/theme";
+import SeniorConnectionPanel from "@/features/connection/SeniorConnectionPanel";
 
 const features = [
   {
@@ -19,11 +20,6 @@ const features = [
     symbol: "◷",
     title: "Nhắc nhở",
     description: "Lịch chăm sóc mỗi ngày.",
-  },
-  {
-    symbol: "⌂",
-    title: "Người thân",
-    description: "Kết nối cùng gia đình.",
   },
 ];
 
@@ -54,9 +50,11 @@ export default function SeniorHomeScreen() {
           </Text>
         </View>
 
+        <SeniorConnectionPanel />
+
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Tiện ích chăm sóc</Text>
-          <Text style={styles.sectionCaption}>4 tiện ích</Text>
+          <Text style={styles.sectionCaption}>3 tiện ích</Text>
         </View>
 
         <View style={styles.featureGrid}>
@@ -97,19 +95,19 @@ const styles = StyleSheet.create({
     maxWidth: 620,
     alignSelf: "center",
     paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingTop: 8,
     paddingBottom: 28,
-    gap: 16,
+    gap: 12,
   },
   header: {
-    minHeight: 42,
+    minHeight: 38,
     flexDirection: "row",
     alignItems: "center",
     gap: 9,
   },
   brandMark: {
-    width: 34,
-    height: 34,
+    width: 32,
+    height: 32,
     borderRadius: 11,
     backgroundColor: colors.primary,
     alignItems: "center",
@@ -143,8 +141,8 @@ const styles = StyleSheet.create({
   },
   greetingTitle: {
     color: colors.text,
-    fontSize: 27,
-    lineHeight: 34,
+    fontSize: 24,
+    lineHeight: 31,
     fontWeight: "800",
   },
   greetingDescription: {
@@ -176,13 +174,13 @@ const styles = StyleSheet.create({
   featureCard: {
     width: "48%",
     flexGrow: 1,
-    minHeight: 150,
+    minHeight: 144,
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1,
     borderRadius: 18,
-    padding: 14,
-    gap: 6,
+    padding: 12,
+    gap: 5,
   },
   iconCircle: {
     width: 34,

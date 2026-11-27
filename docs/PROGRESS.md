@@ -50,3 +50,39 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - Expanded unit tests for network, disabled-account, permission, rate-limit and unknown Firebase error messages (7/7 passed). Auth Emulator integration test passed (1/1): registration, invalid email, weak password, duplicate email, wrong/correct login, logout and password-reset request. Firestore Rules Emulator tests passed (7/7). Expo Doctor passed (20/20). TypeScript and ESLint passed; latest ESLint run had no warnings.
 - `npm audit --omit=dev` now reports 3 moderate `minimatch` findings under `@expo/fingerprint`; Expo SDK 58's upstream build-tool dependency. The 4 high `@grpc/grpc-js` findings were addressed by pinning the transitive package to 1.14.7. Do not run `npm audit fix --force` or downgrade Expo. The remaining minimatch advisory is documented by Expo maintainers as not affecting production app bundles; it remains visible for review.
 - Latest local-device, Windows CLI and iPhone checks remain unverified. Firebase Auth/Firestore cloud staging has not been smoke-tested. No cloud data write, Rules deployment, billing change, PR creation or merge has occurred.
+
+
+## Phase 03 — Family Connection (in progress)
+- [x] Confirmed Phase 02 merge commit 0e38f65 and created feature/phase-03-family-connection from main.
+- [x] Recovered the original Phase 03 scope: family creates a one-use 8-character code; senior previews the family name and confirms; either participant can disconnect; reconnection uses a new code.
+- [x] Implement one-use 8-character invites, 15-minute expiry, current-member indexes and immutable connection-history documents with atomic writes.
+- [x] Integrate family and senior connection panels into the existing home screens, including name preview and explicit senior confirmation.
+- [x] Add owner/participant-only Firestore Rules. CI passed TypeScript, ESLint, unit tests, Auth Emulator, Firestore Rules Emulator and Expo Doctor on commit bbe7a09.
+- [x] Add a security invariant so a senior can create member-index records only for the exact family/senior participants in the connection.
+- [x] Expand Firestore Rules Emulator tests for invite creation/use, unauthorized reads, cross-account member-index writes, disconnect and reconnect (12/12 passed).
+- [ ] Pull to Windows, install SDK 58-compatible Expo modules, and test the full create → connect → disconnect → reconnect flow on iPhone.
+- [ ] Obtain owner acceptance before merging the Pull Request.
+- GitHub Actions run `45856353502` (push) and `45856365322` (Pull Request), commit `8a10b69`: TypeScript, ESLint, unit tests (7/7), Auth Emulator (1/1), Firestore Rules Emulator (12/12) and Expo Doctor (20/20) passed. The production dependency audit still reports 3 moderate upstream `minimatch` advisories; it is non-blocking and documented above.
+- No Firestore Rules have been deployed to the existing Firebase project; the PR remains draft pending Windows/iPhone acceptance.
+
+
+### Phase 03 scope correction — many-to-many (owner approved)
+- Previous one-to-one implementation passed Windows typecheck/lint, 7 unit, 1 Auth and 12 Rules Emulator tests; those results do not certify this revision.
+- Replace account-wide member locks with one lock per family/senior pair: connectionPairs/{familyUid}/seniors/{seniorUid}. Connection history is still keyed by one-use invite code. Participant-scoped queries return only the caller's connection records. No composite index required for single-field filters.
+- Keep one currently issued invite per caregiver; a new invite invalidates the unused prior invite, not existing relationships. Each code expires exactly 15 minutes after its server-created timestamp. Invalid/expired/used/revoked codes share a safe permission error; no private names exposed through stale codes.
+- Client uses real transaction reads only on authorized documents; no lookup of a new random code or nonexistent connection history. Rules prevent overwrites; a rare code collision fails safely and user can retry.
+- Preserve history on disconnect; reconnect creates a fresh history entry. No health data access is granted.
+- 8-character codes have 40 bits of entropy; Spark Rules do not supply a per-user server rate limiter. This is a limited staging/demo design, not a claim of production abuse resistance. Keep codes private.
+- No deployed Rules change or data migration performed. Existing unshipped single-member index is denied; no known cloud Phase 03 data. No deletion.
+- [ ] CI and Windows checks for this revision, then physical iPhone acceptance, then explicitly authorized staging Rules review and smoke test. PR remains draft.
+
+- Windows owner log for `325ccd7`: typecheck and ESLint passed; Firestore Rules Emulator 16/16 passed, including many-to-many and concurrent redemption. CI also passed TypeScript, ESLint, unit, Auth and Rules tests, but Expo Doctor 19/20 reported Expo 58.0.26 vs expected ~58.1.0. Align Expo dependency to ~58.1.0 (same SDK major), pending new CI and local install/device validation.
+
+- CI for `8bf69e2` passed both push and PR runs (45924036918, 45924041604). Windows install succeeded, but the retained local lockfile resolved expo-router 58.0.32; Expo Doctor expects ~58.0.33. Raise the minimum patch version in package.json, then recheck Windows install and CI before device acceptance. Keep SDK 58; no cloud changes.
+
+
+## Phase 03 — UI refinement
+- Compact the family/senior connection panels into separate connection-list and invite-entry sections.
+- Add visible connection status, expandable connection details, compact per-person disconnect action with confirmation, invite countdown and copy feedback, concise step-by-step instructions, inline loading and success/error feedback.
+- Preserve the agreed invitation flow: family member creates the code; senior enters and confirms. Keep existing Firebase data model, transaction logic, Security Rules, and authorization unchanged.
+- Compact the home header, greeting spacing and feature cards for iPhone. UI refinement is pending CI and physical iPhone acceptance.

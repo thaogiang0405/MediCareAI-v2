@@ -3,6 +3,7 @@ import { ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { colors } from "@/theme";
+import FamilyConnectionPanel from "@/features/connection/FamilyConnectionPanel";
 
 const features = [
   {
@@ -49,17 +50,7 @@ export default function FamilyHomeScreen() {
           </Text>
         </View>
 
-        <View style={styles.statusCard}>
-          <View style={styles.statusIcon}>
-            <Text style={styles.statusSymbol}>♡</Text>
-          </View>
-          <View style={styles.statusCopy}>
-            <Text style={styles.statusTitle}>Chưa kết nối người thân</Text>
-            <Text style={styles.statusDescription}>
-              Tính năng kết nối sẽ được bổ sung ở giai đoạn tiếp theo.
-            </Text>
-          </View>
-        </View>
+        <FamilyConnectionPanel />
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Tiện ích gia đình</Text>
@@ -97,19 +88,19 @@ const styles = StyleSheet.create({
     maxWidth: 620,
     alignSelf: "center",
     paddingHorizontal: 20,
-    paddingTop: 12,
+    paddingTop: 8,
     paddingBottom: 28,
-    gap: 16,
+    gap: 12,
   },
   header: {
-    minHeight: 42,
+    minHeight: 38,
     flexDirection: "row",
     alignItems: "center",
     gap: 9,
   },
   brandMark: {
-    width: 34,
-    height: 34,
+    width: 32,
+    height: 32,
     borderRadius: 11,
     backgroundColor: colors.primary,
     alignItems: "center",
@@ -143,8 +134,8 @@ const styles = StyleSheet.create({
   },
   greetingTitle: {
     color: colors.text,
-    fontSize: 25,
-    lineHeight: 32,
+    fontSize: 23,
+    lineHeight: 29,
     fontWeight: "800",
   },
   greetingDescription: {
@@ -213,13 +204,13 @@ const styles = StyleSheet.create({
   featureCard: {
     width: "48%",
     flexGrow: 1,
-    minHeight: 150,
+    minHeight: 144,
     backgroundColor: colors.surface,
     borderColor: colors.border,
     borderWidth: 1,
     borderRadius: 18,
-    padding: 14,
-    gap: 6,
+    padding: 12,
+    gap: 5,
   },
   iconCircle: {
     width: 34,
