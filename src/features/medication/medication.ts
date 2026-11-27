@@ -37,6 +37,7 @@ export type MedicationRequestRecord = {
   id: string;
   ownerUid: string;
   medicationId: string | null;
+  medicationName: string;
   requestType: MedicationRequestType;
   proposedData: MedicationDraft | null;
   requestedByUid: string;
@@ -145,6 +146,7 @@ function toRequest(id: string, data: Record<string, unknown>): MedicationRequest
     id,
     ownerUid: typeof data.ownerUid === "string" ? data.ownerUid : "",
     medicationId: typeof data.medicationId === "string" ? data.medicationId : null,
+    medicationName: typeof data.medicationName === "string" ? data.medicationName : "Thuốc",
     requestType: data.requestType === "update" || data.requestType === "stop" || data.requestType === "delete"
       ? data.requestType
       : "create",
@@ -325,6 +327,7 @@ export async function createMedicationRequest(
   seniorUid: string,
   requestType: MedicationRequestType,
   medicationId: string | null,
+  medicationName: string,
   proposedData: MedicationDraft | null,
   reason: string,
 ) {
@@ -339,6 +342,7 @@ export async function createMedicationRequest(
   await addDoc(requestCollection(seniorUid), {
     ownerUid: seniorUid,
     medicationId,
+    medicationName: medicationName.trim().slice(0, 120),
     requestType,
     proposedData,
     requestedByUid: user.uid,
