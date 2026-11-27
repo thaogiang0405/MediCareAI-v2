@@ -345,23 +345,40 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
               ? <View style={styles.loading}><ActivityIndicator color={colors.primary} /><Text style={styles.muted}>Đang tải đề xuất...</Text></View>
               : requests.length === 0
                 ? <Text style={styles.muted}>{family ? "Bạn chưa gửi đề xuất nào." : "Chưa có đề xuất cần xem xét."}</Text>
-                : requests.slice(0, 8).map(request => (
-                  <View key={request.id} style={styles.requestCard}>
-                    <Text style={styles.medicationName}>{requestTypeLabel(request.requestType)}: {request.medicationName}</Text>
-                    <Text style={styles.muted}>Người gửi: {request.requestedByUid.slice(0, 8)} · {requestStatusLabel(request.status)}</Text>
-                    {!!request.proposedData && <Text style={styles.detail}>
-                      Đề xuất: {request.proposedData.dosage} {request.proposedData.dosageUnit}, {request.proposedData.frequency} lần/ngày ({request.proposedData.intakeTimes.join(" · ")})
-                    </Text>}
-                    {!!request.reason && <Text style={styles.detail}>Lý do: {request.reason}</Text>}
-                    {!!request.reviewNote && <Text style={styles.detail}>Phản hồi: {request.reviewNote}</Text>}
-                    {!family && request.status === "pending" && (
-                      <View style={styles.actions}>
-                        <Pressable disabled={busy} style={styles.primaryButton} onPress={() => confirmReview(request, "approved")}><Text style={styles.primaryText}>Duyệt và áp dụng</Text></Pressable>
-                        <Pressable disabled={busy} style={styles.deleteButton} onPress={() => confirmReview(request, "rejected")}><Text style={styles.deleteText}>Từ chối</Text></Pressable>
-                      </View>
-                    )}
-                  </View>
-                ))}
+                : requests.slice(0, 8).map(request => {
+                  const currentMedication = request.medicationId
+                    ? medications?.find(item => item.id === request.medicationId)
+                    : undefined;
+                  const proposal = request.proposedData;
+                  return (
+                    <View key={request.id} style={styles.requestCard}>
+                      <Text style={styles.medicationName}>{requestTypeLabel(request.requestType)}: {request.medicationName}</Text>
+                      <Text style={styles.muted}>Người gửi: {request.requestedByUid.slice(0, 8)} · {requestStatusLabel(request.status)}</Text>
+                      {!!currentMedication && <Text style={styles.detail}>
+                        Thông tin hiện tại: {currentMedication.name} · {currentMedication.dosage} {currentMedication.dosageUnit} · {currentMedication.frequency} lần/ngày
+                      </Text>}
+                      {!!proposal && (
+                        <View style={styles.requestDetails}>
+                          <Text style={styles.requestHeading}>Thông tin đề xuất</Text>
+                          <Text style={styles.detail}>Tên thuốc: {proposal.name}{proposal.strengthText ? " · " + proposal.strengthText : ""}</Text>
+                          <Text style={styles.detail}>Liều dùng: {proposal.dosage} {proposal.dosageUnit} · Dạng: {MEDICATION_FORMS.find(form => form.value === proposal.dosageForm)?.label ?? "Khác"}</Text>
+                          <Text style={styles.detail}>Số lần: {proposal.frequency} lần/ngày · Giờ: {proposal.intakeTimes.join(" · ")}</Text>
+                          {!!proposal.directionsText && <Text style={styles.detail}>Hướng dẫn: {proposal.directionsText}</Text>}
+                          <Text style={styles.detail}>Thời gian: {proposal.startDate || "Chưa đặt ngày bắt đầu"} – {proposal.endDate || "Không đặt ngày kết thúc"}</Text>
+                          {!!proposal.notes && <Text style={styles.detail}>Ghi chú: {proposal.notes}</Text>}
+                        </View>
+                      )}
+                      {!!request.reason && <Text style={styles.detail}>Lý do: {request.reason}</Text>}
+                      {!!request.reviewNote && <Text style={styles.detail}>Phản hồi: {request.reviewNote}</Text>}
+                      {!family && request.status === "pending" && (
+                        <View style={styles.actions}>
+                          <Pressable disabled={busy} style={styles.primaryButton} onPress={() => confirmReview(request, "approved")}><Text style={styles.primaryText}>Duyệt và áp dụng</Text></Pressable>
+                          <Pressable disabled={busy} style={styles.deleteButton} onPress={() => confirmReview(request, "rejected")}><Text style={styles.deleteText}>Từ chối</Text></Pressable>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
           </View>
           {!!intakeError && <Text style={styles.error}>{intakeError}</Text>}
           <View style={styles.requestPanel}>
@@ -552,6 +569,7 @@ const styles = StyleSheet.create({
   requestPanel: { gap: 9, padding: 12, borderRadius: 14, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
   requestHeading: { color: colors.text, fontSize: 16, fontWeight: "800" },
   requestCard: { gap: 6, padding: 10, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  requestDetails: { gap: 4, padding: 9, borderRadius: 10, backgroundColor: colors.background },
   historyRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: colors.border },
   historyActor: { color: colors.primaryDark, fontSize: 11, fontWeight: "700" },
   fieldLabel: { color: colors.text, fontSize: 14, fontWeight: "700", marginBottom: 5 },
