@@ -59,6 +59,15 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
   const [requestError, setRequestError] = useState("");
   const [intakeError, setIntakeError] = useState("");
   const [notificationError, setNotificationError] = useState("");
+  const [caregiverView, setCaregiverView] = useState<"medications" | "activity">("medications");
+  const [activityTab, setActivityTab] = useState<"notifications" | "requests" | "history">("notifications");
+  const [seniorPickerOpen, setSeniorPickerOpen] = useState(false);
+  const [expandedMedicationId, setExpandedMedicationId] = useState<string | null>(null);
+  const [moreMedicationActionsId, setMoreMedicationActionsId] = useState<string | null>(null);
+  const [expandedRequestId, setExpandedRequestId] = useState<string | null>(null);
+  const [showAllNotifications, setShowAllNotifications] = useState(false);
+  const [showAllRequests, setShowAllRequests] = useState(false);
+  const [showAllHistory, setShowAllHistory] = useState(false);
 
   useEffect(() => {
     if (!family) return;
@@ -72,6 +81,13 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
       error => { setConnections(null); setConnectionError(medicationErrorMessage(error)); },
     );
   }, [family, user.uid, retry]);
+
+  useEffect(() => {
+    if (!family || !connections) return;
+    if (!connections.some(item => item.seniorUid === seniorUid)) {
+      setSeniorUid(connections[0]?.seniorUid ?? "");
+    }
+  }, [family, connections, seniorUid]);
 
   const selectedConnection = family && !connectionError
     ? connections?.find(item => item.seniorUid === seniorUid)
@@ -158,6 +174,18 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
     [medications, tab],
   );
   const activeCount = (medications ?? []).filter(item => item.status === "active").length;
+  const pendingRequestCount = (requests ?? []).filter(item => item.status === "pending").length;
+
+  function selectSenior(uid: string) {
+    setSeniorUid(uid);
+    setSeniorPickerOpen(false);
+    setExpandedMedicationId(null);
+    setMoreMedicationActionsId(null);
+    setCaregiverView("medications");
+    setActivityTab("notifications");
+    setEditor(false);
+    setCalendar(null);
+  }
 
   function openCreate() {
     setEditorOwner(scope);
