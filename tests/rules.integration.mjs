@@ -446,6 +446,7 @@ function medicationRequestData(ownerUid, requestedByUid, requestType = "update",
   return {
     ownerUid,
     medicationId: requestType === "create" ? null : medicationId,
+    medicationName: "Paracetamol",
     requestType,
     proposedData: requestType === "create" || requestType === "update" ? medicationProposal() : null,
     requestedByUid,
