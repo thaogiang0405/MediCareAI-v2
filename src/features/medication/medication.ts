@@ -198,7 +198,7 @@ export function watchMedicationRequests(
   const base = requestCollection(seniorUid);
   const source = role === "family"
     ? query(base, where("requestedByUid", "==", actorUid))
-    : base;
+    : query(base, where("ownerUid", "==", seniorUid));
   return onSnapshot(source, { includeMetadataChanges: true }, snapshot => {
     if (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) return;
     onValue(snapshot.docs
