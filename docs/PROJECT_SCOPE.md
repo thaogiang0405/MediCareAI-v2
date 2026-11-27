@@ -6,7 +6,7 @@
 
 ## Phase 02 — Authentication
 - Firebase Authentication Email/Password, hồ sơ người dùng theo UID, persistence, recovery và protected routes.
-- Vai trò lưu trong Firestore: \`elderly\` và \`caregiver\`; giao diện sử dụng nhãn người cao tuổi/người thân.
+- Vai trò lưu trong Firestore: `elderly` và `caregiver`; giao diện sử dụng nhãn người cao tuổi/người thân.
 - Không lưu mật khẩu hoặc email vào hồ sơ Firestore.
 
 ## Phase 03 — Kết nối gia đình
@@ -24,7 +24,7 @@ Chính sách được chủ dự án phê duyệt ngày 27/11/2026. Đặc tả 
 - Người cao tuổi và người chăm sóc đang kết nối đều được ghi nhận uống thuốc. Nhật ký là append-only, không được sửa/xóa.
 - Ngắt kết nối thu hồi quyền đọc, gửi đề xuất và ghi nhật ký của người chăm sóc.
 - Người đại diện hợp pháp/được ủy quyền là một loại thẩm quyền riêng, không suy ra từ kết nối gia đình. Phase 04 chưa cấp quyền đại diện; dữ liệu và quyền này mặc định bị từ chối cho đến khi có quy trình xác minh, cấp quyền và thu hồi được phê duyệt.
-- Giữ nguyên đường dẫn dữ liệu thuốc hiện có \`elderlyProfiles/{seniorUid}/medications/{medicationId}\`; không xóa hoặc di chuyển dữ liệu.
+- Giữ nguyên đường dẫn dữ liệu thuốc hiện có `elderlyProfiles/{seniorUid}/medications/{medicationId}`; không xóa hoặc di chuyển dữ liệu.
 
 ## Các giai đoạn tiếp theo
 - Phase 05: lịch chăm sóc, nhắc giờ, thông báo và quy trình xác nhận liều theo phạm vi được phê duyệt.
@@ -34,7 +34,7 @@ Chính sách được chủ dự án phê duyệt ngày 27/11/2026. Đặc tả 
 ## Bảo toàn Firebase và an toàn
 - Dùng Firebase project hiện tại; không tạo project mới, không xóa/di chuyển dữ liệu.
 - Không deploy Security Rules hoặc Cloud Functions nếu chưa được chủ dự án xem xét và chấp thuận riêng.
-- Không commit \`.env\`, service account hoặc private key.
+- Không commit `.env`, service account hoặc private key.
 - Không phát sinh phí: Spark, Email/Password, Firestore và Emulator; không Blaze, SMS, Storage hoặc dịch vụ trả phí.
 - Không merge Phase 04 trước khi CI, Windows và iPhone được kiểm thử, chủ dự án nghiệm thu rõ ràng.
 
