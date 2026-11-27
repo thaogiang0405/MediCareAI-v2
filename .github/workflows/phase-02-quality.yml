@@ -9,6 +9,7 @@ on:
   pull_request:
     branches:
       - main
+      - feature/phase-04-medication-management
 
 concurrency:
   group: phase-02-quality-${{ github.ref }}
