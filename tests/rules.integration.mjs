@@ -601,12 +601,17 @@ test("Phase 04: owner approval applies a caregiver proposal atomically; rejectio
       updatedAt: serverTimestamp(),
       reviewNote: "Đã đồng ý.",
     });
+    transaction.set(
+      doc(senior, "elderlyProfiles", "s1", "medicationNotifications", "review-update-request"),
+      medicationNotificationData("s1", "proposal_reviewed", "med-1", "Paracetamol", "s1", names.s1, "elderly", "update-request", "update", "approved"),
+    );
     if (!requestSnapshot.exists()) throw new Error("Expected pending request.");
   }));
   const updatedMedication = (await assertSucceeds(getDoc(medicationRef))).data();
   assertEqual(updatedMedication.dosage, "2");
   assertEqual(updatedMedication.revision, 2);
   assertEqual((await assertSucceeds(getDoc(doc(senior, "elderlyProfiles", "s1", "medicationRequests", "update-request")))).data().status, "approved");
+  await assertSucceeds(getDoc(doc(caregiver, "elderlyProfiles", "s1", "medicationNotifications", "review-update-request")));
 
   const createRequestRef = doc(caregiver, "elderlyProfiles", "s1", "medicationRequests", "create-request");
   const ownerCreateRequestRef = doc(senior, "elderlyProfiles", "s1", "medicationRequests", "create-request");
