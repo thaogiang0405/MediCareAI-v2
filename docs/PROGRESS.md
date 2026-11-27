@@ -79,3 +79,10 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - Windows owner log for `325ccd7`: typecheck and ESLint passed; Firestore Rules Emulator 16/16 passed, including many-to-many and concurrent redemption. CI also passed TypeScript, ESLint, unit, Auth and Rules tests, but Expo Doctor 19/20 reported Expo 58.0.26 vs expected ~58.1.0. Align Expo dependency to ~58.1.0 (same SDK major), pending new CI and local install/device validation.
 
 - CI for `8bf69e2` passed both push and PR runs (45924036918, 45924041604). Windows install succeeded, but the retained local lockfile resolved expo-router 58.0.32; Expo Doctor expects ~58.0.33. Raise the minimum patch version in package.json, then recheck Windows install and CI before device acceptance. Keep SDK 58; no cloud changes.
+
+
+## Phase 03 — UI refinement
+- Compact the family/senior connection panels into separate connection-list and invite-entry sections.
+- Add visible connection status, expandable connection details, compact per-person disconnect action with confirmation, invite countdown and copy feedback, concise step-by-step instructions, inline loading and success/error feedback.
+- Preserve the agreed invitation flow: family member creates the code; senior enters and confirms. Keep existing Firebase data model, transaction logic, Security Rules, and authorization unchanged.
+- Compact the home header, greeting spacing and feature cards for iPhone. UI refinement is pending CI and physical iPhone acceptance.
