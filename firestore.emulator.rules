@@ -238,11 +238,17 @@ service cloud.firestore {
     }
 
     function isValidMedicationUpdate(uid) {
+      // The existing document was accepted by the previous create/update Rules.
+      // Validate the changed document once; revalidating the full old and new
+      // maps in the same request can exceed Firestore's Rules expression budget.
       return canAccessMedicationProfile(uid)
-        && hasValidMedicationSchema(resource.data)
+        && resource.data.ownerUid == uid
+        && resource.data.revision is int
+        && resource.data.revision >= 1
+        && resource.data.status in ['active', 'inactive']
+        && resource.data.createdAt is timestamp
         && hasValidMedicationSchema(request.resource.data)
         && hasPhase04MedicationFields(request.resource.data)
-        && resource.data.ownerUid == uid
         && request.resource.data.ownerUid == resource.data.ownerUid
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.createdByUid == resource.data.get('createdByUid', uid)
