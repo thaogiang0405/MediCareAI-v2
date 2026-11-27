@@ -108,3 +108,17 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - [x] Owner reviewed and approved deployment; `npx --yes firebase-tools deploy --only firestore:rules --project medicare-ai-cf804` completed successfully on 27/11/2026. Firebase confirmed `firestore.rules` compiled and was released. No data migration or deletion was performed.
 - [ ] Owner acceptance before merging PR; do not merge in this work.
 - In-app medication notifications are included in Phase 04. Remote push notifications while the app is closed, OCR, and scheduled dose confirmation remain future work (Phase 05/06). No paid service or native dependency added.
+
+
+## Caregiver UI/UX redesign (27/11/2026)
+
+- Created feature branch `feature/caregiver-ui-redesign` from Phase 04 head; opened draft PR #4 targeting `feature/phase-04-medication-management`.
+- Reworked only the caregiver home header, connected-person panel, invite-code flow and caregiver medication interface. Senior home layout remains unchanged.
+- Connected people: compact avatar/name/status rows, expandable details, list capped at three until expanded, secondary disconnect action with confirmation.
+- Invite flow: clear three-step guidance; real Firestore code; copy action; 15-minute countdown; active/expired/used states; confirmation before replacing an active or expired unused code. Existing connected pairs are unaffected.
+- Medication view: automatically selects the first active senior connection; selector supports switching between connected seniors and refreshes all scoped listeners. Dashboard shows only values available from existing snapshots.
+- Added separate Thuốc and Hoạt động views. Medication cards collapse details and prioritize the confirm-before-record intake action; caregiver edit/stop/delete/add remain proposals only. Activity tabs separate shared notifications, the caregiver's own proposals and the latest 30 intake logs.
+- Kept Firebase Auth, Firestore schema, security rules, service functions, queries, and role permissions unchanged. No mock data, package additions, native dependencies, migrations or Firebase deployment.
+- CI workflow now covers feature branches and pull requests targeting the Phase 04 branch so this UI change can be validated before merging.
+- [ ] Complete TypeScript, lint, unit, Auth Emulator, Firestore Rules Emulator and Expo Doctor checks on PR #4.
+- [ ] Owner verifies layout and real interactions on iPhone and Android, including multiple connected seniors, code replacement confirmation, disconnect, intake confirmation and proposal tracking. Do not merge before device acceptance.
