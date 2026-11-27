@@ -143,6 +143,13 @@ async function updateMedicationRecord(
     const createdByUid = typeof current.createdByUid === "string"
       ? current.createdByUid
       : seniorUid;
+    const existingIntakeTimes = Array.isArray(current.intakeTimes) && current.intakeTimes.length > 0
+      ? current.intakeTimes
+      : ["08:00"];
+    const existingFrequency = Array.isArray(current.intakeTimes) && current.intakeTimes.length > 0
+      ? (typeof current.frequency === "number" ? current.frequency : existingIntakeTimes.length)
+      : 1;
+
     transaction.update(ref, {
       ...changes,
       ownerUid: seniorUid,
@@ -150,8 +157,8 @@ async function updateMedicationRecord(
       dosage: typeof changes.dosage === "string" ? changes.dosage : (typeof current.dosage === "string" ? current.dosage : ""),
       dosageUnit: typeof changes.dosageUnit === "string" ? changes.dosageUnit : (typeof current.dosageUnit === "string" ? current.dosageUnit : "liều"),
       dosageForm: typeof changes.dosageForm === "string" ? changes.dosageForm : (typeof current.dosageForm === "string" ? current.dosageForm : "other"),
-      frequency: typeof changes.frequency === "number" ? changes.frequency : (typeof current.frequency === "number" ? current.frequency : Math.max(1, Array.isArray(current.intakeTimes) ? current.intakeTimes.length : 1)),
-      intakeTimes: Array.isArray(changes.intakeTimes) ? changes.intakeTimes : (Array.isArray(current.intakeTimes) ? current.intakeTimes : []),
+      frequency: typeof changes.frequency === "number" ? changes.frequency : existingFrequency,
+      intakeTimes: Array.isArray(changes.intakeTimes) ? changes.intakeTimes : existingIntakeTimes,
       startDate: typeof changes.startDate === "string" ? changes.startDate : (typeof current.startDate === "string" ? current.startDate : ""),
       endDate: typeof changes.endDate === "string" ? changes.endDate : (typeof current.endDate === "string" ? current.endDate : ""),
       notes: typeof changes.notes === "string" ? changes.notes : (typeof current.notes === "string" ? current.notes : ""),
