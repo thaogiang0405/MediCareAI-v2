@@ -4,13 +4,10 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { colors } from "@/theme";
 import SeniorConnectionPanel from "@/features/connection/SeniorConnectionPanel";
+import MedicationPanel from "@/features/medication/MedicationPanel";
 
 const features = [
   {
-    symbol: "＋",
-    title: "Thuốc của tôi",
-    description: "Danh sách thuốc và giờ uống.",
-  },
   {
     symbol: "♡",
     title: "Sức khỏe",
@@ -52,9 +49,11 @@ export default function SeniorHomeScreen() {
 
         <SeniorConnectionPanel />
 
+        <MedicationPanel />
+
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Tiện ích chăm sóc</Text>
-          <Text style={styles.sectionCaption}>3 tiện ích</Text>
+          <Text style={styles.sectionCaption}>2 tiện ích</Text>
         </View>
 
         <View style={styles.featureGrid}>
