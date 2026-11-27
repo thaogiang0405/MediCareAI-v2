@@ -299,17 +299,20 @@ service cloud.firestore {
       let data = request.resource.data;
       return hasActiveMedicationConnection(uid)
         && data.keys().hasAll([
-          'ownerUid', 'medicationId', 'requestType', 'proposedData',
+          'ownerUid', 'medicationId', 'medicationName', 'requestType', 'proposedData',
           'requestedByUid', 'reason', 'status', 'createdAt', 'updatedAt',
           'reviewedByUid', 'reviewedAt', 'reviewNote'
         ])
         && data.keys().hasOnly([
-          'ownerUid', 'medicationId', 'requestType', 'proposedData',
+          'ownerUid', 'medicationId', 'medicationName', 'requestType', 'proposedData',
           'requestedByUid', 'reason', 'status', 'createdAt', 'updatedAt',
           'reviewedByUid', 'reviewedAt', 'reviewNote'
         ])
         && data.ownerUid == uid
         && data.requestedByUid == request.auth.uid
+        && data.medicationName is string
+        && data.medicationName.size() >= 1
+        && data.medicationName.size() <= 120
         && data.requestType is string
         && data.requestType in ['create', 'update', 'stop', 'delete']
         && data.reason is string && data.reason.size() <= 500
@@ -352,6 +355,7 @@ service cloud.firestore {
         && request.resource.data.requestedByUid == resource.data.requestedByUid
         && request.resource.data.requestType == resource.data.requestType
         && request.resource.data.medicationId == resource.data.medicationId
+        && request.resource.data.medicationName == resource.data.medicationName
         && request.resource.data.proposedData == resource.data.proposedData
         && request.resource.data.reason == resource.data.reason
         && request.resource.data.createdAt == resource.data.createdAt
@@ -931,7 +935,6 @@ service cloud.firestore {
       // The elderly owner alone can approve or reject; requests are never deleted.
       allow get: if hasValidElderlyProfile(uid)
         || (hasActiveMedicationConnection(uid)
-          && resource.data.ownerUid == uid
           && resource.data.requestedByUid == request.auth.uid);
       allow list: if (hasValidElderlyProfile(uid) && resource.data.ownerUid == uid)
         || (hasActiveMedicationConnection(uid)
