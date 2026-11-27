@@ -15,7 +15,7 @@ import {
 } from "firebase/firestore";
 import { services } from "@/lib/firebase";
 import type { Profile } from "@/features/profile/profile";
-import type { MedicationDraft } from "./validation";
+import { medicationValidationError, type MedicationDraft } from "./validation";
 
 export type MedicationStatus = "active" | "inactive" | "deleted";
 export type MedicationRequestType = "create" | "update" | "stop" | "delete";
@@ -375,6 +375,13 @@ export async function reviewMedicationRequest(
     if (currentRequest.ownerUid !== seniorUid || currentRequest.status !== "pending") {
       throw new Error("request-not-pending");
     }
+    if (
+      decision === "approved"
+      && currentRequest.proposedData
+      && medicationValidationError(currentRequest.proposedData)
+    ) {
+      throw new Error("invalid-request");
+    }
 
     let medicationRef = currentRequest.medicationId
       ? doc(db, "elderlyProfiles", seniorUid, "medications", currentRequest.medicationId)
@@ -385,7 +392,11 @@ export async function reviewMedicationRequest(
       const medicationSnapshot = await transaction.get(medicationRef);
       if (!medicationSnapshot.exists()) throw new Error("not-found");
       medicationData = medicationSnapshot.data();
-      if (medicationData.ownerUid !== seniorUid || medicationData.status === "deleted") {
+      if (
+        medicationData.ownerUid !== seniorUid
+        || medicationData.status === "deleted"
+        || (currentRequest.requestType === "stop" && medicationData.status !== "active")
+      ) {
         throw new Error("not-editable");
       }
     }
