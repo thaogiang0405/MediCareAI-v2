@@ -652,6 +652,35 @@ test("Phase 04: owner approval applies a caregiver proposal atomically; rejectio
     reviewNote: "Không đồng ý.",
   }));
   assertEqual((await assertSucceeds(getDoc(medicationRef))).data().dosage, "2");
+
+  const stopRequestRef = doc(caregiver, "elderlyProfiles", "s1", "medicationRequests", "stop-request");
+  const ownerStopRequestRef = doc(senior, "elderlyProfiles", "s1", "medicationRequests", "stop-request");
+  await assertSucceeds(setDoc(stopRequestRef, medicationRequestData("s1", "f1", "stop", "med-1")));
+  await assertSucceeds(runTransaction(senior, async transaction => {
+    const requestSnapshot = await transaction.get(ownerStopRequestRef);
+    const medicationSnapshot = await transaction.get(medicationRef);
+    transaction.update(medicationRef, {
+      status: "inactive",
+      deletedAt: null,
+      updatedByUid: "s1",
+      updatedAt: serverTimestamp(),
+      revision: medicationSnapshot.data().revision + 1,
+    });
+    transaction.update(ownerStopRequestRef, {
+      status: "approved",
+      reviewedByUid: "s1",
+      reviewedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      reviewNote: "Đã duyệt ngừng thuốc.",
+    });
+    transaction.set(
+      doc(senior, "elderlyProfiles", "s1", "medicationNotifications", "approved-stop-history"),
+      medicationNotificationData("s1", "medication_stopped", "med-1", "Paracetamol", "s1", names.s1, "elderly"),
+    );
+    if (!requestSnapshot.exists()) throw new Error("Expected pending stop request.");
+  }));
+  assertEqual((await assertSucceeds(getDoc(medicationRef))).data().status, "inactive");
+  await assertSucceeds(getDoc(doc(caregiver, "elderlyProfiles", "s1", "medicationNotifications", "approved-stop-history")));
 });
 
 test("Phase 04: caregiver proposals create shared notifications for the owner and every connected caregiver", async () => {
