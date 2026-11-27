@@ -453,9 +453,9 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
             <Text style={styles.caregiverMuted}>Đang tải dữ liệu thuốc...</Text>
           </View>
         )}
-        {!!loadError && (
+        {!!medicationError && (
           <View style={styles.caregiverNoticeError}>
-            <Text style={styles.caregiverErrorText}>{loadError}</Text>
+            <Text style={styles.caregiverErrorText}>{medicationError}</Text>
             <Pressable style={styles.caregiverRetryButton} onPress={() => setRetry(value => value + 1)}>
               <Text style={styles.caregiverRetryText}>Tải lại dữ liệu</Text>
             </Pressable>
@@ -992,21 +992,6 @@ function requestStatusShortLabel(status: MedicationRequestRecord["status"]) {
   }
 }
 
-function notificationTone(item: MedicationNotificationRecord): "info" | "success" | "warning" | "danger" {
-  if (item.eventType === "proposal_reviewed") return item.decision === "approved" ? "success" : "danger";
-  if (item.eventType === "medication_stopped") return "warning";
-  if (item.eventType === "medication_reactivated") return "success";
-  return "info";
-}
-
-function requestStatusShortLabel(status: MedicationRequestRecord["status"]) {
-  switch (status) {
-    case "pending": return "Chờ duyệt";
-    case "approved": return "Đã duyệt";
-    case "rejected": return "Bị từ chối";
-  }
-}
-
 function notificationMessage(item: MedicationNotificationRecord) {
   switch (item.eventType) {
     case "proposal_submitted":
@@ -1201,6 +1186,8 @@ const styles = StyleSheet.create({
   caregiverHistoryDot: { width: 9, height: 9, borderRadius: 5, backgroundColor: colors.primary, marginTop: 4 },
   caregiverHistoryLine: { flex: 1, width: 1, backgroundColor: colors.border, marginTop: 4 },
   caregiverHistoryCopy: { flex: 1, gap: 3, paddingBottom: 12 },
+  caregiverShowMore: { minHeight: 42, alignItems: "center", justifyContent: "center", borderRadius: 11, backgroundColor: colors.background },
+  caregiverShowMoreText: { color: colors.primaryDark, fontSize: 12, fontWeight: "800" },
   caregiverEmpty: { alignItems: "center", backgroundColor: colors.background, borderRadius: 14, padding: 15, gap: 6 },
   caregiverEmptyTitle: { color: colors.text, fontSize: 14, fontWeight: "900", textAlign: "center" },
   caregiverLoading: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 9, paddingVertical: 14 },
