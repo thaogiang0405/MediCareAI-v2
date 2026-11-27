@@ -120,5 +120,5 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - Added separate Thuốc and Hoạt động views. Medication cards collapse details and prioritize the confirm-before-record intake action; caregiver edit/stop/delete/add remain proposals only. Activity tabs separate shared notifications, the caregiver's own proposals and the latest 30 intake logs.
 - Kept Firebase Auth, Firestore schema, security rules, service functions, queries, and role permissions unchanged. No mock data, package additions, native dependencies, migrations or Firebase deployment.
 - CI workflow now covers feature branches and pull requests targeting the Phase 04 branch so this UI change can be validated before merging.
-- [ ] Complete TypeScript, lint, unit, Auth Emulator, Firestore Rules Emulator and Expo Doctor checks on PR #4.
+- [x] GitHub Actions run #194 (`46030923793`) on head `069b940`: SUCCESS. TypeScript PASS; ESLint PASS; Unit tests 7/7; Auth Emulator 1/1; Firestore Rules Emulator 24/24; Expo Doctor 20/20.
 - [ ] Owner verifies layout and real interactions on iPhone and Android, including multiple connected seniors, code replacement confirmation, disconnect, intake confirmation and proposal tracking. Do not merge before device acceptance.
