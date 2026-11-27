@@ -88,6 +88,8 @@ Firestore Rules chỉ cho chủ hồ sơ tạo/cập nhật thuốc chính thứ
 
 Không thay đổi đường dẫn dữ liệu thuốc cũ, không xóa/migrate dữ liệu, không deploy Rules lên Firebase thật trong thay đổi mã nguồn này.
 
+**Cảnh báo staging:** Rules đã Publish trước đó có thể vẫn là phiên bản Phase 04 cũ cho phép caregiver ghi trực tiếp vào thuốc. Cho đến khi chủ dự án xem xét và Publish bộ Rules mới, không coi giới hạn quyền trong giao diện là ranh giới bảo mật phía máy chủ; không dùng tài khoản người chăm sóc để thử các thao tác ghi trên dữ liệu sức khỏe staging.
+
 ## 7. Tiêu chí nghiệm thu
 
 1. Người cao tuổi có thể thêm, sửa, ngừng và xóa mềm thuốc của mình.
