@@ -572,9 +572,12 @@ test("Phase 04: owner approval applies a caregiver proposal atomically; rejectio
   await seedUsers();
   await assertSucceeds(issue("f1", "ABCD2345"));
   await assertSucceeds(connect("f1", "s1", "ABCD2345"));
+  await assertSucceeds(issue("f2", "EFGH6789"));
+  await assertSucceeds(connect("f2", "s1", "EFGH6789"));
 
   const senior = db("s1");
   const caregiver = db("f1");
+  const caregiverTwo = db("f2");
   const medicationRef = doc(senior, "elderlyProfiles", "s1", "medications", "med-1");
   await assertSucceeds(setDoc(medicationRef, medicationData("s1", "s1")));
 
