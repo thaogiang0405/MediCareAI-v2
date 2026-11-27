@@ -96,24 +96,25 @@ service cloud.firestore {
 
     function hasValidElderlyProfileData(uid) {
       let profile = get(/databases/$(database)/documents/users/$(uid)).data;
-      return hasValidUserProfileSchema(profile)
+      return profile is map
         && profile.uid == uid
         && profile.primaryRole == 'elderly'
+        && profile.roles is map
         && profile.roles.elderly == true
         && profile.roles.caregiver == false
         && profile.onboardingCompleted == true;
     }
 
     function hasValidElderlyProfile(uid) {
-      return ownsUser(uid)
-        && exists(/databases/$(database)/documents/users/$(uid))
-        && hasValidElderlyProfileData(uid);
+      return ownsUser(uid) && hasValidElderlyProfileData(uid);
     }
 
     function hasExactMedicationFields(data) {
       return data.keys().hasAll([
-          'ownerUid', 'name', 'strengthText', 'directionsText',
-          'status', 'createdAt', 'updatedAt', 'revision'
+          'ownerUid', 'name', 'strengthText', 'dosage', 'dosageUnit',
+          'dosageForm', 'frequency', 'intakeTimes', 'directionsText',
+          'startDate', 'endDate', 'notes', 'status', 'createdByUid',
+          'updatedByUid', 'createdAt', 'updatedAt', 'deletedAt', 'revision'
         ])
         && data.keys().hasOnly([
           'ownerUid', 'name', 'strengthText', 'dosage', 'dosageUnit',
@@ -134,7 +135,7 @@ service cloud.firestore {
         && times.size() >= 1
         && times.size() <= 6
         && times.toSet().size() == times.size()
-        && (times.size() < 1 || hasValidMedicationTime(times[0]))
+        && hasValidMedicationTime(times[0])
         && (times.size() < 2 || hasValidMedicationTime(times[1]))
         && (times.size() < 3 || hasValidMedicationTime(times[2]))
         && (times.size() < 4 || hasValidMedicationTime(times[3]))
@@ -154,54 +155,54 @@ service cloud.firestore {
         && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
         && data.name.matches('.*[^ ].*')
         && data.strengthText is string && data.strengthText.size() <= 80
+        && data.dosage is string && data.dosage.size() >= 1 && data.dosage.size() <= 40
+        && data.dosageUnit is string && data.dosageUnit.size() >= 1 && data.dosageUnit.size() <= 40
+        && data.dosageForm is string && data.dosageForm in ['tablet', 'capsule', 'syrup', 'solution', 'powder', 'other']
+        && data.frequency is int && data.frequency >= 1 && data.frequency <= 6
+        && hasValidMedicationIntakeTimes(data.intakeTimes)
+        && data.frequency == data.intakeTimes.size()
         && data.directionsText is string && data.directionsText.size() <= 500
+        && data.startDate is string
+        && (data.startDate == '' || hasValidMedicationDate(data.startDate))
+        && data.endDate is string
+        && (data.endDate == '' || hasValidMedicationDate(data.endDate))
+        && (data.startDate == '' || data.endDate == '' || data.endDate >= data.startDate)
+        && data.notes is string && data.notes.size() <= 500
         && data.status is string && data.status in ['active', 'inactive', 'deleted']
-        && data.createdAt is timestamp && data.updatedAt is timestamp
-        && data.revision is int && data.revision >= 1
-        && (!('dosage' in data) || (data.dosage is string && data.dosage.size() <= 40))
-        && (!('dosageUnit' in data) || (data.dosageUnit is string && data.dosageUnit.size() <= 40))
-        && (!('dosageForm' in data) || data.dosageForm in ['tablet', 'capsule', 'syrup', 'solution', 'powder', 'other'])
-        && (!('frequency' in data) || (data.frequency is int && data.frequency >= 1 && data.frequency <= 6))
-        && (!('intakeTimes' in data) || hasValidMedicationIntakeTimes(data.intakeTimes))
-        && (!('startDate' in data) || data.startDate == null || data.startDate == '' || (data.startDate is string && hasValidMedicationDate(data.startDate)))
-        && (!('endDate' in data) || data.endDate == null || data.endDate == '' || (data.endDate is string && hasValidMedicationDate(data.endDate)))
-        && (!('startDate' in data) || !('endDate' in data) || data.startDate == null || data.startDate == '' || data.endDate == null || data.endDate == '' || data.endDate >= data.startDate)
-        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 500))
-        && (!('createdByUid' in data) || data.createdByUid is string)
-        && (!('updatedByUid' in data) || data.updatedByUid is string)
-        && (!('deletedAt' in data) || data.deletedAt == null || data.deletedAt is timestamp);
+        && data.createdByUid is string
+        && data.updatedByUid is string
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && (data.deletedAt == null || data.deletedAt is timestamp)
+        && data.revision is int && data.revision >= 1;
     }
 
-    function hasActiveMedicationConnectionRecordData(uid, pair, connectionPath) {
-      let connection = get(connectionPath).data;
-      return connection.status == 'connected'
+    function hasActiveMedicationConnectionRecord(uid, connectionId) {
+      let connection = get(/databases/$(database)/documents/connections/$(connectionId)).data;
+      return connection is map
+        && connection.status == 'connected'
         && connection.familyUid == request.auth.uid
         && connection.seniorUid == uid;
     }
 
-    function hasActiveMedicationConnectionRecord(uid, pair) {
-      let connectionPath = /databases/$(database)/documents/connections/$(pair.connectionId);
-      return exists(connectionPath)
-        && hasActiveMedicationConnectionRecordData(uid, pair, connectionPath);
-    }
-
-    function hasActiveMedicationConnectionData(uid, pairPath) {
-      let pair = get(pairPath).data;
-      return pair.status == 'connected'
-        && hasActiveMedicationConnectionRecord(uid, pair);
+    function hasActiveMedicationConnectionForPair(uid, pair) {
+      return pair is map
+        && pair.status == 'connected'
+        && pair.connectionId is string
+        && hasActiveMedicationConnectionRecord(uid, pair.connectionId);
     }
 
     function hasActiveMedicationConnectionForSignedInUser(uid) {
-      let pairPath = /databases/$(database)/documents/connectionPairs/$(request.auth.uid)/seniors/$(uid);
-      let caregiverPath = /databases/$(database)/documents/users/$(request.auth.uid);
-      let caregiver = get(caregiverPath).data;
-      return exists(caregiverPath)
+      let caregiver = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let pair = get(/databases/$(database)/documents/connectionPairs/$(request.auth.uid)/seniors/$(uid)).data;
+      return caregiver is map
         && caregiver.uid == request.auth.uid
-        && hasValidUserProfileSchema(caregiver)
         && caregiver.primaryRole == 'caregiver'
+        && caregiver.roles is map
+        && caregiver.roles.caregiver == true
+        && caregiver.roles.elderly == false
         && caregiver.onboardingCompleted == true
-        && exists(pairPath)
-        && hasActiveMedicationConnectionData(uid, pairPath);
+        && hasActiveMedicationConnectionForPair(uid, pair);
     }
 
     function hasActiveMedicationConnection(uid) {
@@ -212,22 +213,10 @@ service cloud.firestore {
       return hasValidElderlyProfile(uid) || hasActiveMedicationConnection(uid);
     }
 
-    function hasPhase04MedicationFields(data) {
-      return data.keys().hasAll([
-        'dosage', 'dosageUnit', 'dosageForm', 'frequency', 'intakeTimes',
-        'startDate', 'endDate', 'notes', 'createdByUid', 'updatedByUid', 'deletedAt'
-      ]);
-    }
-
     function isValidMedicationCreate(uid) {
       return canAccessMedicationProfile(uid)
         && hasValidMedicationSchema(request.resource.data)
-        && hasPhase04MedicationFields(request.resource.data)
         && request.resource.data.ownerUid == uid
-        && request.resource.data.name.size() >= 1
-        && request.resource.data.dosage.size() >= 1
-        && request.resource.data.dosageUnit.size() >= 1
-        && request.resource.data.frequency == request.resource.data.intakeTimes.size()
         && request.resource.data.status == 'active'
         && request.resource.data.createdByUid == request.auth.uid
         && request.resource.data.updatedByUid == request.auth.uid
@@ -238,25 +227,19 @@ service cloud.firestore {
     }
 
     function isValidMedicationUpdate(uid) {
-      // The existing document was accepted by the previous create/update Rules.
-      // Validate the changed document once; revalidating the full old and new
-      // maps in the same request can exceed Firestore's Rules expression budget.
       return canAccessMedicationProfile(uid)
         && resource.data.ownerUid == uid
+        && resource.data.status in ['active', 'inactive']
         && resource.data.revision is int
         && resource.data.revision >= 1
-        && resource.data.status in ['active', 'inactive']
         && resource.data.createdAt is timestamp
         && hasValidMedicationSchema(request.resource.data)
-        && hasPhase04MedicationFields(request.resource.data)
-        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.ownerUid == uid
         && request.resource.data.createdAt == resource.data.createdAt
         && request.resource.data.createdByUid == resource.data.get('createdByUid', uid)
         && request.resource.data.updatedByUid == request.auth.uid
         && request.resource.data.updatedAt == request.time
         && request.resource.data.revision == resource.data.revision + 1
-        && request.resource.data.frequency == request.resource.data.intakeTimes.size()
-        && resource.data.status != 'deleted'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
           'name', 'strengthText', 'dosage', 'dosageUnit', 'dosageForm',
           'frequency', 'intakeTimes', 'directionsText', 'startDate',
@@ -264,7 +247,7 @@ service cloud.firestore {
           'updatedAt', 'deletedAt', 'revision'
         ])
         && (
-          (request.resource.data.status in ['active', 'inactive']
+          (request.resource.data.status in ['active', 'inactive')
             && request.resource.data.deletedAt == null)
           || (request.resource.data.status == 'deleted'
             && request.resource.data.deletedAt == request.time)
