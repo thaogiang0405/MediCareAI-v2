@@ -549,9 +549,10 @@ test("Phase 04: owner approval applies a caregiver proposal atomically; rejectio
   await assertSucceeds(setDoc(medicationRef, medicationData("s1", "s1")));
 
   const updateRequestRef = doc(caregiver, "elderlyProfiles", "s1", "medicationRequests", "update-request");
+  const ownerUpdateRequestRef = doc(senior, "elderlyProfiles", "s1", "medicationRequests", "update-request");
   await assertSucceeds(setDoc(updateRequestRef, medicationRequestData("s1", "f1", "update", "med-1")));
   await assertSucceeds(runTransaction(senior, async transaction => {
-    const requestSnapshot = await transaction.get(updateRequestRef);
+    const requestSnapshot = await transaction.get(ownerUpdateRequestRef);
     const medicationSnapshot = await transaction.get(medicationRef);
     const current = medicationSnapshot.data();
     const proposed = medicationProposal({ dosage: "2", notes: "Người cao tuổi đã duyệt." });
@@ -566,7 +567,7 @@ test("Phase 04: owner approval applies a caregiver proposal atomically; rejectio
       updatedAt: serverTimestamp(),
       revision: current.revision + 1,
     });
-    transaction.update(updateRequestRef, {
+    transaction.update(ownerUpdateRequestRef, {
       status: "approved",
       reviewedByUid: "s1",
       reviewedAt: serverTimestamp(),
@@ -581,10 +582,11 @@ test("Phase 04: owner approval applies a caregiver proposal atomically; rejectio
   assertEqual((await assertSucceeds(getDoc(doc(senior, "elderlyProfiles", "s1", "medicationRequests", "update-request")))).data().status, "approved");
 
   const createRequestRef = doc(caregiver, "elderlyProfiles", "s1", "medicationRequests", "create-request");
+  const ownerCreateRequestRef = doc(senior, "elderlyProfiles", "s1", "medicationRequests", "create-request");
   await assertSucceeds(setDoc(createRequestRef, medicationRequestData("s1", "f1", "create", null)));
   const newMedicationRef = doc(senior, "elderlyProfiles", "s1", "medications", "med-from-request");
   await assertSucceeds(runTransaction(senior, async transaction => {
-    const requestSnapshot = await transaction.get(createRequestRef);
+    const requestSnapshot = await transaction.get(ownerCreateRequestRef);
     transaction.set(newMedicationRef, {
       ...medicationProposal({ name: "Thuốc do người thân đề xuất" }),
       ownerUid: "s1",
@@ -596,7 +598,7 @@ test("Phase 04: owner approval applies a caregiver proposal atomically; rejectio
       updatedAt: serverTimestamp(),
       revision: 1,
     });
-    transaction.update(createRequestRef, {
+    transaction.update(ownerCreateRequestRef, {
       status: "approved",
       reviewedByUid: "s1",
       reviewedAt: serverTimestamp(),
@@ -608,8 +610,9 @@ test("Phase 04: owner approval applies a caregiver proposal atomically; rejectio
   assertEqual((await assertSucceeds(getDoc(newMedicationRef))).data().createdByUid, "s1");
 
   const rejectedRequestRef = doc(caregiver, "elderlyProfiles", "s1", "medicationRequests", "rejected-request");
+  const ownerRejectedRequestRef = doc(senior, "elderlyProfiles", "s1", "medicationRequests", "rejected-request");
   await assertSucceeds(setDoc(rejectedRequestRef, medicationRequestData("s1", "f1", "update", "med-1")));
-  await assertSucceeds(updateDoc(rejectedRequestRef, {
+  await assertSucceeds(updateDoc(ownerRejectedRequestRef, {
     status: "rejected",
     reviewedByUid: "s1",
     reviewedAt: serverTimestamp(),
