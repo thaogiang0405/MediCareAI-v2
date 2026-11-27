@@ -221,7 +221,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
       }
       setEditor(false);
       Alert.alert("Quản lý thuốc", family
-        ? "Đã gửi đề xuất đến người cao tuổi để xem xét."
+        ? "Đã gửi đề xuất. Người cao tuổi và những người chăm sóc đang kết nối sẽ thấy thông báo trong ứng dụng."
         : (editing ? "Đã cập nhật thông tin thuốc." : "Đã thêm thuốc mới."));
     } catch (error) {
       Alert.alert("Quản lý thuốc", medicationErrorMessage(error));
@@ -235,7 +235,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
     const title = family ? "Đề xuất ngừng thuốc?" : "Ngừng sử dụng thuốc?";
     const message = family
       ? "Đề xuất sẽ được gửi cho người cao tuổi. Thuốc vẫn được giữ nguyên cho đến khi họ quyết định."
-      : "Thuốc sẽ chuyển sang mục Đã ngừng. Dữ liệu vẫn được lưu.";
+      : "Thuốc sẽ chuyển sang mục Đã ngừng. Ứng dụng ghi lại thời điểm và thông báo cho những người chăm sóc đang kết nối.";
     Alert.alert(title, message, [
       { text: "Để sau", style: "cancel" },
       {
@@ -245,7 +245,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
           () => family
             ? createMedicationRequest(user, profile, selectedSeniorUid, "stop", item.id, item.name, null, "Đề xuất ngừng sử dụng thuốc.")
             : stopMedication(user, profile, selectedSeniorUid, item),
-          family ? "Đã gửi đề xuất ngừng thuốc." : "Đã ngừng sử dụng thuốc.",
+          family ? "Đã gửi đề xuất ngừng thuốc và thông báo cho gia đình." : "Đã ngừng sử dụng thuốc và thông báo cho những người chăm sóc đang kết nối.",
         ),
       },
     ]);
@@ -282,7 +282,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
           () => family
             ? createMedicationRequest(user, profile, selectedSeniorUid, "delete", item.id, item.name, null, "Đề xuất xóa thuốc.")
             : deleteMedication(user, profile, selectedSeniorUid, item),
-          family ? "Đã gửi đề xuất xóa thuốc." : "Đã chuyển thuốc vào mục đã xóa.",
+          family ? "Đã gửi đề xuất xóa thuốc và thông báo cho gia đình." : "Đã chuyển thuốc vào mục đã xóa.",
         ),
       },
     ]);
