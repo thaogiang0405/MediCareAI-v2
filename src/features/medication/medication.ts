@@ -3,6 +3,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   limit,
   onSnapshot,
   orderBy,
@@ -339,6 +340,19 @@ export async function createMedicationRequest(
   ) {
     throw new Error("invalid-request");
   }
+  if (requestType !== "create" && medicationId) {
+    const target = await getDoc(doc(database(), "elderlyProfiles", seniorUid, "medications", medicationId));
+    if (!target.exists()) throw new Error("not-found");
+    const targetData = target.data();
+    if (
+      targetData.ownerUid !== seniorUid
+      || !["active", "inactive"].includes(String(targetData.status))
+      || (requestType === "stop" && targetData.status !== "active")
+      || ((requestType === "stop" || requestType === "delete") && targetData.name !== medicationName)
+    ) {
+      throw new Error("not-editable");
+    }
+  }
   await addDoc(requestCollection(seniorUid), {
     ownerUid: seniorUid,
     medicationId,
@@ -396,6 +410,8 @@ export async function reviewMedicationRequest(
         medicationData.ownerUid !== seniorUid
         || medicationData.status === "deleted"
         || (currentRequest.requestType === "stop" && medicationData.status !== "active")
+        || ((currentRequest.requestType === "stop" || currentRequest.requestType === "delete")
+          && medicationData.name !== currentRequest.medicationName)
       ) {
         throw new Error("not-editable");
       }
