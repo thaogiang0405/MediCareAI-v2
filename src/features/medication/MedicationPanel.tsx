@@ -992,6 +992,21 @@ function requestStatusShortLabel(status: MedicationRequestRecord["status"]) {
   }
 }
 
+function notificationTone(item: MedicationNotificationRecord): "info" | "success" | "warning" | "danger" {
+  if (item.eventType === "proposal_reviewed") return item.decision === "approved" ? "success" : "danger";
+  if (item.eventType === "medication_stopped") return "warning";
+  if (item.eventType === "medication_reactivated") return "success";
+  return "info";
+}
+
+function requestStatusShortLabel(status: MedicationRequestRecord["status"]) {
+  switch (status) {
+    case "pending": return "Chờ duyệt";
+    case "approved": return "Đã duyệt";
+    case "rejected": return "Bị từ chối";
+  }
+}
+
 function notificationMessage(item: MedicationNotificationRecord) {
   switch (item.eventType) {
     case "proposal_submitted":
