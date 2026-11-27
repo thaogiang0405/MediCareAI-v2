@@ -126,7 +126,27 @@ service cloud.firestore {
     function hasValidMedicationTime(value) {
       return value is string
         && value.size() == 5
-        && value.matches('^(?:[01][0-9]|2[0-3]):[0-5][0-9]
+        && value.matches('^(?:[01][0-9]|2[0-3]):[0-5][0-9]');
+    }
+
+    function hasValidMedicationIntakeTimes(times) {
+      return times is list
+        && times.size() >= 1
+        && times.size() <= 6
+        && times.toSet().size() == times.size()
+        && (times.size() < 1 || hasValidMedicationTime(times[0]))
+        && (times.size() < 2 || hasValidMedicationTime(times[1]))
+        && (times.size() < 3 || hasValidMedicationTime(times[2]))
+        && (times.size() < 4 || hasValidMedicationTime(times[3]))
+        && (times.size() < 5 || hasValidMedicationTime(times[4]))
+        && (times.size() < 6 || hasValidMedicationTime(times[5]));
+    }
+
+    function hasValidMedicationDate(value) {
+      return value is string
+        && value.size() == 10
+        && value.matches('^20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])');
+    }
 
     function hasValidMedicationSchema(data) {
       return hasExactMedicationFields(data)
@@ -163,12 +183,21 @@ service cloud.firestore {
         && connection.seniorUid == uid;
     }
 
-    function hasActiveMedicationConnection(uid) {
+    function hasActiveMedicationConnectionForSignedInUser(uid) {
       let pairPath = /databases/$(database)/documents/connectionPairs/$(request.auth.uid)/seniors/$(uid);
-      return signedIn()
-        && isFamily(request.auth.uid)
+      let caregiverPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      let caregiver = get(caregiverPath).data;
+      return exists(caregiverPath)
+        && caregiver.uid == request.auth.uid
+        && hasValidUserProfileSchema(caregiver)
+        && caregiver.primaryRole == 'caregiver'
+        && caregiver.onboardingCompleted == true
         && exists(pairPath)
         && hasActiveMedicationConnectionData(uid, pairPath);
+    }
+
+    function hasActiveMedicationConnection(uid) {
+      return signedIn() && hasActiveMedicationConnectionForSignedInUser(uid);
     }
 
     function canAccessMedicationProfile(uid) {
