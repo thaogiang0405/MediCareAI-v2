@@ -108,3 +108,17 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - [x] Owner reviewed and approved deployment; `npx --yes firebase-tools deploy --only firestore:rules --project medicare-ai-cf804` completed successfully on 27/11/2026. Firebase confirmed `firestore.rules` compiled and was released. No data migration or deletion was performed.
 - [ ] Owner acceptance before merging PR; do not merge in this work.
 - In-app medication notifications are included in Phase 04. Remote push notifications while the app is closed, OCR, and scheduled dose confirmation remain future work (Phase 05/06). No paid service or native dependency added.
+
+
+## Caregiver UI/UX redesign (27/11/2026)
+
+- Phase 04 was merged into `main` via PR #3 (merge commit `b89fd7238915b9e40c154a946247875efd6273a1`). Caregiver UI work remains isolated on `feature/caregiver-ui-redesign`; draft PR #4 now targets `main`.
+- Reworked only the caregiver home header, connected-person panel, invite-code flow and caregiver medication interface. Senior home layout remains unchanged.
+- Connected people: compact avatar/name/status rows, expandable details, list capped at three until expanded, secondary disconnect action with confirmation.
+- Invite flow: clear three-step guidance; real Firestore code; copy action; 15-minute countdown; active/expired/used states; confirmation before replacing an active or expired unused code. Existing connected pairs are unaffected.
+- Medication view: automatically selects the first active senior connection; selector supports switching between connected seniors and refreshes all scoped listeners. Dashboard shows only values available from existing snapshots.
+- Added separate Thuốc and Hoạt động views. Medication cards collapse details and prioritize the confirm-before-record intake action; caregiver edit/stop/delete/add remain proposals only. Activity tabs separate shared notifications, the caregiver's own proposals and the latest 30 intake logs.
+- Kept Firebase Auth, Firestore schema, security rules, service functions, queries, and role permissions unchanged. No mock data, package additions, native dependencies, migrations or Firebase deployment.
+- CI workflow now runs for all `feature/**` branches and pull requests targeting `main` or the Phase 04 branch.
+- [x] GitHub Actions run #196 (`46031183947`) on head `5c9945c`: SUCCESS. TypeScript PASS; ESLint PASS; Unit tests 7/7; Auth Emulator 1/1; Firestore Rules Emulator 24/24; Expo Doctor 20/20.
+- [ ] Owner verifies layout and real interactions on iPhone and Android, including multiple connected seniors, code replacement confirmation, disconnect, intake confirmation and proposal tracking. Do not merge before device acceptance.
