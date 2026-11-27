@@ -187,6 +187,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
 
   function selectSenior(uid: string) {
     setSeniorUid(uid);
+    setRetry(value => value + 1);
     setSeniorPickerOpen(false);
     setExpandedMedicationId(null);
     setMoreMedicationActionsId(null);
