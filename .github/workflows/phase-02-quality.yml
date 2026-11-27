@@ -3,12 +3,11 @@ name: Phase 02 quality
 on:
   push:
     branches:
-      - feature/phase-02-auth
-      - feature/phase-03-family-connection
-      - feature/phase-04-medication-management
+      - 'feature/**'
   pull_request:
     branches:
       - main
+      - feature/phase-04-medication-management
 
 concurrency:
   group: phase-02-quality-${{ github.ref }}
