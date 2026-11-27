@@ -107,79 +107,116 @@ service cloud.firestore {
 
     function hasExactMedicationFields(data) {
       return data.keys().hasAll([
-          'ownerUid',
-          'name',
-          'strengthText',
-          'directionsText',
-          'status',
-          'createdAt',
-          'updatedAt',
-          'revision'
+          'ownerUid', 'name', 'strengthText', 'directionsText',
+          'status', 'createdAt', 'updatedAt', 'revision'
         ])
         && data.keys().hasOnly([
-          'ownerUid',
-          'name',
-          'strengthText',
-          'directionsText',
-          'status',
-          'createdAt',
-          'updatedAt',
-          'revision'
+          'ownerUid', 'name', 'strengthText', 'dosage', 'dosageUnit',
+          'dosageForm', 'frequency', 'intakeTimes', 'directionsText',
+          'startDate', 'endDate', 'notes', 'status', 'createdByUid',
+          'updatedByUid', 'createdAt', 'updatedAt', 'deletedAt', 'revision'
         ]);
     }
 
     function hasValidMedicationSchema(data) {
       return hasExactMedicationFields(data)
         && data.ownerUid is string
-        && data.name is string
-        && data.name.size() >= 1
-        && data.name.size() <= 120
-        && data.name.matches('.*\\S.*')
-        && data.strengthText is string
-        && data.strengthText.size() <= 80
-        && data.directionsText is string
-        && data.directionsText.size() <= 500
-        && data.status is string
-        && data.status in ['active', 'inactive']
-        && data.createdAt is timestamp
-        && data.updatedAt is timestamp
-        && data.revision is int
-        && data.revision >= 1;
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.name.matches('.*\\\\S.*')
+        && data.strengthText is string && data.strengthText.size() <= 80
+        && data.directionsText is string && data.directionsText.size() <= 500
+        && data.status is string && data.status in ['active', 'inactive', 'deleted']
+        && data.createdAt is timestamp && data.updatedAt is timestamp
+        && data.revision is int && data.revision >= 1
+        && (!('dosage' in data) || (data.dosage is string && data.dosage.size() <= 40))
+        && (!('dosageUnit' in data) || (data.dosageUnit is string && data.dosageUnit.size() <= 40))
+        && (!('dosageForm' in data) || data.dosageForm in ['tablet', 'capsule', 'syrup', 'solution', 'powder', 'other'])
+        && (!('frequency' in data) || (data.frequency is int && data.frequency >= 1 && data.frequency <= 6))
+        && (!('intakeTimes' in data) || (
+          data.intakeTimes is list && data.intakeTimes.size() <= 6
+          && data.intakeTimes.toSet().size() == data.intakeTimes.size()
+          && data.intakeTimes.toSet().hasOnly(['00:00','01:00','02:00','03:00','04:00','05:00','06:00','07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00','20:00','21:00','22:00','23:00'])
+        ))
+        && (!('startDate' in data) || data.startDate == null || (data.startDate is string && hasValidMedicationScheduleDate(data.startDate)))
+        && (!('endDate' in data) || data.endDate == null || (data.endDate is string && hasValidMedicationScheduleDate(data.endDate)))
+        && (!('startDate' in data) || !('endDate' in data) || data.startDate == null || data.endDate == null || data.endDate >= data.startDate)
+        && (!('notes' in data) || (data.notes is string && data.notes.size() <= 500))
+        && (!('createdByUid' in data) || data.createdByUid is string)
+        && (!('updatedByUid' in data) || data.updatedByUid is string)
+        && (!('deletedAt' in data) || data.deletedAt == null || data.deletedAt is timestamp);
+    }
+
+    function hasActiveMedicationConnection(uid) {
+      let pairPath = /databases/$(database)/documents/connectionPairs/$(request.auth.uid)/seniors/$(uid);
+      let pair = get(pairPath).data;
+      let connectionPath = /databases/$(database)/documents/connections/$(pair.connectionId);
+      let connection = get(connectionPath).data;
+      let caregiver = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return signedIn()
+        && caregiver.uid == request.auth.uid
+        && hasValidUserProfileSchema(caregiver)
+        && caregiver.primaryRole == 'caregiver'
+        && caregiver.onboardingCompleted == true
+        && exists(pairPath) && pair.status == 'connected'
+        && exists(connectionPath) && connection.status == 'connected'
+        && connection.familyUid == request.auth.uid
+        && connection.seniorUid == uid;
+    }
+
+    function canAccessMedicationProfile(uid) {
+      return hasValidElderlyProfile(uid) || hasActiveMedicationConnection(uid);
+    }
+
+    function hasPhase04MedicationFields(data) {
+      return data.keys().hasAll([
+        'dosage', 'dosageUnit', 'dosageForm', 'frequency', 'intakeTimes',
+        'startDate', 'endDate', 'notes', 'createdByUid', 'updatedByUid', 'deletedAt'
+      ]);
     }
 
     function isValidMedicationCreate(uid) {
-      return hasValidElderlyProfile(uid)
+      return canAccessMedicationProfile(uid)
         && hasValidMedicationSchema(request.resource.data)
+        && hasPhase04MedicationFields(request.resource.data)
         && request.resource.data.ownerUid == uid
+        && request.resource.data.name.size() >= 1
+        && request.resource.data.dosage.size() >= 1
+        && request.resource.data.dosageUnit.size() >= 1
+        && request.resource.data.frequency == request.resource.data.intakeTimes.size()
         && request.resource.data.status == 'active'
+        && request.resource.data.createdByUid == request.auth.uid
+        && request.resource.data.updatedByUid == request.auth.uid
+        && request.resource.data.deletedAt == null
         && request.resource.data.revision == 1
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
     }
 
     function isValidMedicationUpdate(uid) {
-      return hasValidElderlyProfile(uid)
+      return canAccessMedicationProfile(uid)
         && hasValidMedicationSchema(resource.data)
         && hasValidMedicationSchema(request.resource.data)
+        && hasPhase04MedicationFields(request.resource.data)
         && resource.data.ownerUid == uid
         && request.resource.data.ownerUid == resource.data.ownerUid
-        && request.resource.data.ownerUid == uid
         && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdByUid == resource.data.get('createdByUid', uid)
+        && request.resource.data.updatedByUid == request.auth.uid
         && request.resource.data.updatedAt == request.time
         && request.resource.data.revision == resource.data.revision + 1
+        && request.resource.data.frequency == request.resource.data.intakeTimes.size()
+        && resource.data.status != 'deleted'
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'name',
-          'strengthText',
-          'directionsText',
-          'status',
-          'updatedAt',
-          'revision'
+          'name', 'strengthText', 'dosage', 'dosageUnit', 'dosageForm',
+          'frequency', 'intakeTimes', 'directionsText', 'startDate',
+          'endDate', 'notes', 'status', 'createdByUid', 'updatedByUid',
+          'updatedAt', 'deletedAt', 'revision'
         ])
         && (
-          (resource.data.status == 'active'
-            && request.resource.data.status in ['active', 'inactive'])
-          || (resource.data.status == 'inactive'
-            && request.resource.data.status == 'inactive')
+          (request.resource.data.status in ['active', 'inactive']
+            && request.resource.data.deletedAt == null)
+          || (request.resource.data.status == 'deleted'
+            && request.resource.data.deletedAt == request.time)
         );
     }
 
@@ -698,7 +735,7 @@ service cloud.firestore {
     // A profile role from the UI never grants access; the canonical M2.3
     // `/users/{uid}` document is checked for every operation.
     match /elderlyProfiles/{uid}/medications/{medicationId} {
-      allow get, list: if hasValidElderlyProfile(uid);
+      allow get, list: if canAccessMedicationProfile(uid);
       allow create: if isValidMedicationCreate(uid);
       allow update: if isValidMedicationUpdate(uid);
       allow delete: if false;
