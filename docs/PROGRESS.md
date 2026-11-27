@@ -86,3 +86,15 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - Add visible connection status, expandable connection details, compact per-person disconnect action with confirmation, invite countdown and copy feedback, concise step-by-step instructions, inline loading and success/error feedback.
 - Preserve the agreed invitation flow: family member creates the code; senior enters and confirms. Keep existing Firebase data model, transaction logic, Security Rules, and authorization unchanged.
 - Compact the home header, greeting spacing and feature cards for iPhone. UI refinement is pending CI and physical iPhone acceptance.
+
+## Phase 04 — Medication Management (implementation in progress)
+- Started from Phase 03 merge commit 3afd62f on feature/phase-04-medication-management.
+- Reused the existing medication collection path elderlyProfiles/{seniorUid}/medications to preserve M3.2 medication records and the M3.3/M3.4 schedule and dose-event references.
+- Added medication form validation, Firestore CRUD/listener service, legacy-record upgrade-on-edit, status separation, and soft-delete.
+- Added a shared medication panel to senior and family home screens. Family users select one of their active Phase 03 connections before loading that senior's medications.
+- Extended Emulator Rules with owner-or-active-caregiver authorization, strict Phase 04 field validation, immutable owner/creator fields, revision increments, and soft-delete-only behavior. No deployed Firebase Rules change or cloud data migration performed.
+- Added Rules Emulator coverage for owner CRUD, connected caregiver CRUD, access revocation after disconnect, invalid schema, and cross-owner denial.
+- [ ] CI TypeScript, ESLint, unit, Auth Emulator, Firestore Rules Emulator and Expo Doctor.
+- [ ] Windows install and iPhone Expo Go acceptance.
+- [ ] Owner approval before PR merge.
+- OCR remains Phase 06; notifications and dose confirmation remain Phase 05. No paid service or native dependency added.
