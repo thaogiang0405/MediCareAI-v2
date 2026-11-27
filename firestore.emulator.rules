@@ -247,7 +247,7 @@ service cloud.firestore {
           'updatedAt', 'deletedAt', 'revision'
         ])
         && (
-          (request.resource.data.status in ['active', 'inactive')
+          (request.resource.data.status in ['active', 'inactive'])
             && request.resource.data.deletedAt == null)
           || (request.resource.data.status == 'deleted'
             && request.resource.data.deletedAt == request.time)
