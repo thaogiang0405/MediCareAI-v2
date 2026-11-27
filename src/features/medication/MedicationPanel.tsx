@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ActivityIndicator, Alert, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
 import type { User } from "firebase/auth";
 import { useAuth } from "@/features/auth/AuthProvider";
@@ -12,7 +12,7 @@ import {
   watchMedications, type MedicationRecord,
 } from "./medication";
 import {
-  MEDICATION_FORMS, medicationValidationError, normalizeMedicationDraft,
+  MEDICATION_FORMS, medicationValidationError, normalizeMedicationDraft, isCalendarDate,
   type MedicationDraft, type MedicationForm,
 } from "./validation";
 
@@ -32,11 +32,11 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
   const [connections, setConnections] = useState<ConnectionRecord[] | null>(family ? null : []);
   const [seniorUid, setSeniorUid] = useState(family ? "" : user.uid);
   const [medicationSnapshot, setMedicationSnapshot] = useState<{
-    seniorUid: string;
+    scope: string;
     medications: MedicationRecord[];
   } | null>(null);
   const [medicationFailure, setMedicationFailure] = useState<{
-    seniorUid: string;
+    scope: string;
     message: string;
   } | null>(null);
   const [connectionError, setConnectionError] = useState("");
@@ -45,6 +45,10 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
   const [editing, setEditing] = useState<MedicationRecord | null>(null);
   const [draft, setDraft] = useState<MedicationDraft>(EMPTY);
   const [busy, setBusy] = useState(false);
+  const actionLock = useRef(false);
+  const [retry, setRetry] = useState(0);
+  const [editorOwner, setEditorOwner] = useState("");
+  const [calendar, setCalendar] = useState<"startDate" | "endDate" | null>(null);
 
   useEffect(() => {
     if (!family) return;
@@ -55,30 +59,35 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
         setConnections(value);
         setConnectionError("");
       },
-      error => setConnectionError(medicationErrorMessage(error)),
+      error => { setConnections(null); setConnectionError(medicationErrorMessage(error)); },
     );
-  }, [family, user.uid]);
+  }, [family, user.uid, retry]);
 
-  const selectedSeniorUid = family
-    ? (connections && seniorUid && !connections.some(item => item.seniorUid === seniorUid) ? "" : seniorUid)
-    : user.uid;
+  const selectedConnection = family && !connectionError
+    ? connections?.find(item => item.seniorUid === seniorUid)
+    : undefined;
+  const selectedSeniorUid = family ? selectedConnection?.seniorUid ?? "" : user.uid;
+  const scope = selectedSeniorUid ? selectedSeniorUid + ":" + (selectedConnection?.id ?? "self") + ":" + retry : "";
 
   useEffect(() => {
     if (!selectedSeniorUid) return;
     return watchMedications(
       selectedSeniorUid,
-      value => setMedicationSnapshot({ seniorUid: selectedSeniorUid, medications: value }),
-      error => setMedicationFailure({
-        seniorUid: selectedSeniorUid,
-        message: medicationErrorMessage(error),
-      }),
+      value => {
+        setMedicationSnapshot({ scope, medications: value });
+        setMedicationFailure(null);
+      },
+      error => {
+        setMedicationSnapshot(null);
+        setMedicationFailure({ scope, message: medicationErrorMessage(error) });
+      },
     );
-  }, [selectedSeniorUid]);
+  }, [selectedSeniorUid, scope]);
 
-  const medications = selectedSeniorUid && medicationSnapshot?.seniorUid === selectedSeniorUid
+  const medications = scope && medicationSnapshot?.scope === scope
     ? medicationSnapshot.medications
     : null;
-  const medicationError = selectedSeniorUid && medicationFailure?.seniorUid === selectedSeniorUid
+  const medicationError = scope && medicationFailure?.scope === scope
     ? medicationFailure.message
     : "";
   const loadError = connectionError || medicationError;
@@ -88,15 +97,18 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
     [medications, tab],
   );
   const activeCount = (medications ?? []).filter(item => item.status === "active").length;
-  const selectedSenior = connections?.find(item => item.seniorUid === selectedSeniorUid);
 
   function openCreate() {
+    setEditorOwner(scope);
+    setCalendar(null);
     setEditing(null);
     setDraft(EMPTY);
     setEditor(true);
   }
 
   function openEdit(item: MedicationRecord) {
+    setEditorOwner(scope);
+    setCalendar(null);
     setEditing(item);
     setDraft({
       name: item.name, strengthText: item.strengthText, dosage: item.dosage,
@@ -112,8 +124,8 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
     setDraft(current => ({ ...current, [key]: value }));
   }
 
-  function changeFrequency(value: string) {
-    const count = Math.max(1, Math.min(6, Number.parseInt(value, 10) || 1));
+  function changeFrequency(count: number) {
+    if (count < 1 || count > 6) return;
     setDraft(current => ({
       ...current,
       frequency: count,
@@ -122,12 +134,13 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
   }
 
   async function submit() {
-    if (busy) return;
+    if (actionLock.current || !isReady || editorOwner !== scope) return;
     const error = medicationValidationError(draft);
     if (error) {
       Alert.alert("Thông tin thuốc", error);
       return;
     }
+    actionLock.current = true;
     setBusy(true);
     try {
       await saveMedication(user, profile, selectedSeniorUid, editing, normalizeMedicationDraft(draft));
@@ -136,6 +149,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
     } catch (error) {
       Alert.alert("Quản lý thuốc", medicationErrorMessage(error));
     } finally {
+      actionLock.current = false;
       setBusy(false);
     }
   }
@@ -155,7 +169,8 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
   }
 
   async function perform(task: () => Promise<void>, success: string) {
-    if (busy) return;
+    if (actionLock.current || !isReady) return;
+    actionLock.current = true;
     setBusy(true);
     try {
       await task();
@@ -163,6 +178,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
     } catch (error) {
       Alert.alert("Quản lý thuốc", medicationErrorMessage(error));
     } finally {
+      actionLock.current = false;
       setBusy(false);
     }
   }
@@ -176,7 +192,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
           <Text style={styles.title}>{family ? "Quản lý thuốc người thân" : "Thuốc của tôi"}</Text>
           <Text style={styles.subtitle}>{family ? "Chọn người cao tuổi để xem và hỗ trợ quản lý thuốc." : "Theo dõi danh sách thuốc đang sử dụng."}</Text>
         </View>
-        <View style={styles.count}><Text style={styles.countText}>{family ? (selectedSenior ? activeCount : "—") : activeCount}</Text></View>
+        <View style={styles.count}><Text style={styles.countText}>{isReady ? activeCount : "—"}</Text></View>
       </View>
 
       {family && (
@@ -185,7 +201,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
           {connections === null ? <ActivityIndicator color={colors.primary} /> : connections.length === 0 ? (
             <Text style={styles.muted}>Bạn chưa có kết nối đang hoạt động.</Text>
           ) : connections.map(person => (
-            <Pressable key={person.id} onPress={() => setSeniorUid(person.seniorUid)} style={[styles.personOption, seniorUid === person.seniorUid && styles.personSelected]}>
+            <Pressable key={person.id} disabled={busy} onPress={() => { setSeniorUid(person.seniorUid); setEditor(false); setCalendar(null); setRetry(value => value + 1); }} style={[styles.personOption, seniorUid === person.seniorUid && styles.personSelected]}>
               <Text style={styles.personOptionText}>{person.seniorDisplayName}</Text>
               <Text style={styles.personCheck}>{seniorUid === person.seniorUid ? "✓" : "›"}</Text>
             </Pressable>
@@ -193,7 +209,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
         </View>
       )}
 
-      {!!loadError && <Text style={styles.error}>{loadError}</Text>}
+      {!!loadError && <View style={styles.field}><Text style={styles.error}>{loadError}</Text><Pressable style={styles.secondaryButton} onPress={() => { setEditor(false); setCalendar(null); setRetry(value => value + 1); }}><Text style={styles.secondaryText}>Thử tải lại</Text></Pressable></View>}
       {!selectedSeniorUid && family && <Text style={styles.empty}>Chọn một người cao tuổi để xem danh sách thuốc.</Text>}
       {selectedSeniorUid && medications === null && !loadError && <View style={styles.loading}><ActivityIndicator color={colors.primary} /><Text style={styles.muted}>Đang tải danh sách thuốc...</Text></View>}
 
@@ -234,8 +250,8 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
         </>
       )}
 
-      <Modal visible={editor} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { if (!busy) setEditor(false); }}>
-        <View style={styles.modal}>
+      <Modal visible={editor && isReady && editorOwner === scope} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { if (!busy) { setEditor(false); setCalendar(null); } }}>
+        <KeyboardAvoidingView style={styles.modal} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <View style={styles.modalHeader}>
             <Pressable disabled={busy} onPress={() => setEditor(false)}><Text style={styles.modalCancel}>Đóng</Text></Pressable>
             <Text style={styles.modalTitle}>{editing ? "Chỉnh sửa thuốc" : "Thêm thuốc mới"}</Text>
@@ -250,19 +266,75 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
             </View>
             <Text style={styles.fieldLabel}>Dạng thuốc</Text>
             <View style={styles.formChoices}>{MEDICATION_FORMS.map(form => <Pressable key={form.value} onPress={() => patch("dosageForm", form.value as MedicationForm)} style={[styles.choice, draft.dosageForm === form.value && styles.choiceActive]}><Text style={[styles.choiceText, draft.dosageForm === form.value && styles.choiceTextActive]}>{form.label}</Text></Pressable>)}</View>
-            <Field label="Số lần sử dụng trong ngày" value={String(draft.frequency)} onChange={changeFrequency} keyboardType="number-pad" />
+            <Text style={styles.fieldLabel}>Số lần sử dụng trong ngày</Text>
+            <View style={styles.frequencyRow}>
+              <Pressable accessibilityLabel="Giảm số lần" disabled={busy || draft.frequency <= 1} onPress={() => changeFrequency(draft.frequency - 1)} style={[styles.stepButton, draft.frequency <= 1 && styles.disabled]}><Text style={styles.stepText}>−</Text></Pressable>
+              <Text style={styles.frequencyValue}>{draft.frequency} lần/ngày</Text>
+              <Pressable accessibilityLabel="Tăng số lần" disabled={busy || draft.frequency >= 6} onPress={() => changeFrequency(draft.frequency + 1)} style={[styles.stepButton, draft.frequency >= 6 && styles.disabled]}><Text style={styles.stepText}>+</Text></Pressable>
+            </View>
+            <Text style={styles.muted}>Chọn từ 1 đến 6 lần theo đơn thuốc.</Text>
             {draft.intakeTimes.map((time, index) => <Field key={index} label={"Giờ uống lần " + (index + 1)} value={time} onChange={value => patch("intakeTimes", draft.intakeTimes.map((current, i) => i === index ? value : current))} placeholder="08:00" />)}
             <Field label="Hướng dẫn sử dụng" value={draft.directionsText} onChange={value => patch("directionsText", value)} placeholder="Theo chỉ định của bác sĩ" multiline />
-            <Field label="Ngày bắt đầu (YYYY-MM-DD)" value={draft.startDate} onChange={value => patch("startDate", value)} placeholder="2026-11-27" />
-            <Field label="Ngày kết thúc (nếu có)" value={draft.endDate} onChange={value => patch("endDate", value)} placeholder="2026-12-27" />
+            <CalendarField label="Ngày bắt đầu" value={draft.startDate} expanded={calendar === "startDate"} onToggle={() => { Keyboard.dismiss(); setCalendar(calendar === "startDate" ? null : "startDate"); }} onSelect={value => { patch("startDate", value); setCalendar(null); }} />
+            <CalendarField label="Ngày kết thúc (nếu có)" value={draft.endDate} minDate={draft.startDate} expanded={calendar === "endDate"} onToggle={() => { Keyboard.dismiss(); setCalendar(calendar === "endDate" ? null : "endDate"); }} onSelect={value => { patch("endDate", value); setCalendar(null); }} />
             <Field label="Ghi chú" value={draft.notes} onChange={value => patch("notes", value)} placeholder="Ghi chú thêm" multiline />
             <Text style={styles.disclaimer}>Thông tin liều dùng do người chăm sóc nhập theo đơn hoặc chỉ định chuyên môn. Ứng dụng không tự đề xuất hay thay đổi liều thuốc.</Text>
             <Pressable disabled={busy} style={[styles.primaryButton, busy && styles.disabled]} onPress={() => void submit()}><Text style={styles.primaryText}>{busy ? "Đang lưu..." : "Lưu thuốc"}</Text></Pressable>
           </ScrollView>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
+}
+
+function formatDate(value: string) {
+  return isCalendarDate(value) ? value.split("-").reverse().join("/") : "Chọn ngày";
+}
+
+function CalendarField({ label, value, minDate, expanded, onToggle, onSelect }: {
+  label: string; value: string; minDate?: string; expanded: boolean;
+  onToggle: () => void; onSelect: (value: string) => void;
+}) {
+  return <View style={styles.field}>
+    <Text style={styles.fieldLabel}>{label}</Text>
+    <Pressable accessibilityRole="button" onPress={onToggle} style={[styles.input, styles.dateButton]}>
+      <Text style={styles.dateText}>{formatDate(value)}</Text><Text style={styles.secondaryText}>{expanded ? "Đóng lịch" : "Chọn lịch"}</Text>
+    </Pressable>
+    {expanded && <Calendar value={value} minDate={minDate} onSelect={onSelect} />}
+  </View>;
+}
+
+function Calendar({ value, minDate, onSelect }: { value: string; minDate?: string; onSelect: (value: string) => void }) {
+  const now = new Date();
+  const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-");
+  const anchor = isCalendarDate(value) ? value : minDate && isCalendarDate(minDate) && minDate > today ? minDate : today;
+  const [month, setMonth] = useState(() => Number(anchor.slice(0, 4)) * 12 + Number(anchor.slice(5, 7)) - 1);
+  const year = Math.floor(month / 12);
+  const monthIndex = month % 12;
+  const offset = (new Date(year, monthIndex, 1).getDay() + 6) % 7;
+  const count = new Date(year, monthIndex + 1, 0).getDate();
+  const weeks = Math.ceil((offset + count) / 7);
+  return <View style={styles.calendar}>
+    <View style={styles.frequencyRow}>
+      <Pressable accessibilityLabel="Tháng trước" disabled={month <= 2000 * 12} onPress={() => setMonth(m => m - 1)} style={styles.stepButton}><Text style={styles.stepText}>‹</Text></Pressable>
+      <Text style={styles.fieldLabel}>Tháng {monthIndex + 1}/{year}</Text>
+      <Pressable accessibilityLabel="Tháng sau" disabled={month >= 2099 * 12 + 11} onPress={() => setMonth(m => m + 1)} style={styles.stepButton}><Text style={styles.stepText}>›</Text></Pressable>
+    </View>
+    <View style={styles.calendarRow}>{["T2","T3","T4","T5","T6","T7","CN"].map(day => <Text key={day} style={styles.weekday}>{day}</Text>)}</View>
+    {Array.from({ length: weeks }, (_, week) => <View key={week} style={styles.calendarRow}>
+      {Array.from({ length: 7 }, (_, column) => {
+        const day = week * 7 + column - offset + 1;
+        if (day < 1 || day > count) return <View key={column} style={styles.calendarCell} />;
+        const iso = [year, String(monthIndex + 1).padStart(2, "0"), String(day).padStart(2, "0")].join("-");
+        const disabled = !!minDate && iso < minDate;
+        return <Pressable key={column} accessibilityLabel={formatDate(iso)} accessibilityState={{ selected: iso === value, disabled }} disabled={disabled} onPress={() => onSelect(iso)} style={[styles.calendarCell, iso === value && styles.choiceActive, disabled && styles.disabled]}><Text style={styles.calendarDay}>{day}</Text></Pressable>;
+      })}
+    </View>)}
+    <View style={styles.frequencyRow}>
+      <Pressable style={styles.secondaryButton} onPress={() => onSelect("")}><Text style={styles.secondaryText}>Bỏ chọn ngày</Text></Pressable>
+      <Pressable style={[styles.secondaryButton, !!minDate && today < minDate && styles.disabled]} disabled={!!minDate && today < minDate} onPress={() => onSelect(today)}><Text style={styles.secondaryText}>Hôm nay</Text></Pressable>
+    </View>
+  </View>;
 }
 
 function Field({ label, value, onChange, placeholder, keyboardType, multiline }: {
@@ -326,5 +398,16 @@ const styles = StyleSheet.create({
   choiceActive: { borderColor: colors.primary, backgroundColor: colors.soft },
   choiceText: { color: colors.muted, fontSize: 13, fontWeight: "600" },
   choiceTextActive: { color: colors.primaryDark },
+  frequencyRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 6 },
+  stepButton: { minWidth: 48, minHeight: 48, alignItems: "center", justifyContent: "center", backgroundColor: colors.soft, borderRadius: 12 },
+  stepText: { color: colors.primaryDark, fontSize: 27, fontWeight: "800" },
+  frequencyValue: { color: colors.text, fontSize: 20, fontWeight: "800" },
+  dateButton: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  dateText: { color: colors.text, fontSize: 16, fontWeight: "600" },
+  calendar: { padding: 8, gap: 8, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12 },
+  calendarRow: { flexDirection: "row" },
+  weekday: { flex: 1, textAlign: "center", color: colors.muted, fontSize: 12, fontWeight: "700" },
+  calendarCell: { flex: 1, minHeight: 44, borderRadius: 8, alignItems: "center", justifyContent: "center" },
+  calendarDay: { color: colors.text, fontSize: 16, fontWeight: "600" },
   disclaimer: { color: colors.muted, fontSize: 12, lineHeight: 18 },
 });
