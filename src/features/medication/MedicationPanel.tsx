@@ -376,6 +376,386 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
 
   const isReady = !!selectedSeniorUid && medications !== null && !loadError;
 
+  if (family) {
+    return (
+      <View style={styles.caregiverPanel}>
+        <View style={styles.caregiverHeading}>
+          <Text style={styles.caregiverEyebrow}>CHĂM SÓC SỨC KHỎE</Text>
+          <Text style={styles.caregiverTitle}>Theo dõi thuốc</Text>
+          <Text style={styles.caregiverSubtitle}>Xem lịch dùng thuốc, ghi nhận và gửi đề xuất cho người thân.</Text>
+        </View>
+
+        <View style={styles.caregiverSelector}>
+          <View style={styles.caregiverSelectorTop}>
+            <View style={styles.caregiverPersonAvatar}>
+              <Text style={styles.caregiverPersonAvatarText}>
+                {selectedConnection?.seniorDisplayName.trim().charAt(0).toUpperCase() || "?"}
+              </Text>
+            </View>
+            <View style={styles.caregiverSelectorCopy}>
+              <Text style={styles.caregiverEyebrow}>HỒ SƠ ĐANG XEM</Text>
+              <Text style={styles.caregiverSelectedName} numberOfLines={1}>
+                {selectedConnection?.seniorDisplayName ?? (connections === null ? "Đang tải..." : "Chưa chọn người thân")}
+              </Text>
+              {selectedConnection && <Text style={styles.caregiverConnectedLabel}>● Đã kết nối</Text>}
+            </View>
+            {!!connections && connections.length > 1 && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: seniorPickerOpen }}
+                style={styles.caregiverChangeButton}
+                onPress={() => setSeniorPickerOpen(value => !value)}
+              >
+                <Text style={styles.caregiverChangeText}>{seniorPickerOpen ? "Đóng" : "Đổi người"}</Text>
+              </Pressable>
+            )}
+          </View>
+          {seniorPickerOpen && (connections ?? []).map(person => (
+            <Pressable
+              key={person.id}
+              accessibilityRole="button"
+              accessibilityState={{ selected: person.seniorUid === selectedSeniorUid }}
+              style={[styles.caregiverPickerOption, person.seniorUid === selectedSeniorUid && styles.caregiverPickerOptionActive]}
+              onPress={() => selectSenior(person.seniorUid)}
+            >
+              <View style={styles.caregiverPickerAvatar}>
+                <Text style={styles.caregiverPickerAvatarText}>{person.seniorDisplayName.trim().charAt(0).toUpperCase() || "?"}</Text>
+              </View>
+              <Text style={styles.caregiverPickerName}>{person.seniorDisplayName}</Text>
+              <Text style={styles.caregiverPickerCheck}>{person.seniorUid === selectedSeniorUid ? "✓" : "›"}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {connections === null && !connectionError && (
+          <View style={styles.caregiverLoading}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={styles.caregiverMuted}>Đang tải danh sách người thân...</Text>
+          </View>
+        )}
+        {!!connectionError && (
+          <View style={styles.caregiverNoticeError}>
+            <Text style={styles.caregiverErrorText}>{connectionError}</Text>
+            <Pressable style={styles.caregiverRetryButton} onPress={() => setRetry(value => value + 1)}>
+              <Text style={styles.caregiverRetryText}>Thử tải lại</Text>
+            </Pressable>
+          </View>
+        )}
+        {connections?.length === 0 && !connectionError && (
+          <View style={styles.caregiverEmpty}>
+            <Text style={styles.caregiverEmptyTitle}>Chưa có người thân được kết nối</Text>
+            <Text style={styles.caregiverMuted}>Tạo mã kết nối ở phần bên trên để bắt đầu theo dõi thuốc.</Text>
+          </View>
+        )}
+        {selectedSeniorUid && medications === null && !loadError && (
+          <View style={styles.caregiverLoading}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={styles.caregiverMuted}>Đang tải dữ liệu thuốc...</Text>
+          </View>
+        )}
+        {!!loadError && (
+          <View style={styles.caregiverNoticeError}>
+            <Text style={styles.caregiverErrorText}>{loadError}</Text>
+            <Pressable style={styles.caregiverRetryButton} onPress={() => setRetry(value => value + 1)}>
+              <Text style={styles.caregiverRetryText}>Tải lại dữ liệu</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {isReady && (
+          <>
+            <View style={styles.caregiverOverview}>
+              <View style={styles.caregiverMetric}>
+                <Text style={styles.caregiverMetricValue}>{activeCount}</Text>
+                <Text style={styles.caregiverMetricLabel}>Thuốc đang dùng</Text>
+              </View>
+              <View style={styles.caregiverMetricDivider} />
+              <View style={styles.caregiverMetric}>
+                <Text style={styles.caregiverMetricValue}>{requests === null ? "—" : pendingRequestCount}</Text>
+                <Text style={styles.caregiverMetricLabel}>Đề xuất chờ</Text>
+              </View>
+              <View style={styles.caregiverMetricDivider} />
+              <View style={styles.caregiverMetric}>
+                <Text style={styles.caregiverMetricValue}>{intakeLogs === null ? "—" : intakeLogs.length}</Text>
+                <Text style={styles.caregiverMetricLabel}>Ghi nhận gần đây</Text>
+              </View>
+            </View>
+
+            <View style={styles.caregiverMainTabs}>
+              <Pressable
+                accessibilityRole="tab"
+                accessibilityState={{ selected: caregiverView === "medications" }}
+                style={[styles.caregiverMainTab, caregiverView === "medications" && styles.caregiverMainTabActive]}
+                onPress={() => setCaregiverView("medications")}
+              >
+                <Text style={[styles.caregiverMainTabText, caregiverView === "medications" && styles.caregiverMainTabTextActive]}>Thuốc</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="tab"
+                accessibilityState={{ selected: caregiverView === "activity" }}
+                style={[styles.caregiverMainTab, caregiverView === "activity" && styles.caregiverMainTabActive]}
+                onPress={() => setCaregiverView("activity")}
+              >
+                <Text style={[styles.caregiverMainTabText, caregiverView === "activity" && styles.caregiverMainTabTextActive]}>Hoạt động</Text>
+                {pendingRequestCount > 0 && <View style={styles.caregiverTabBadge}><Text style={styles.caregiverTabBadgeText}>{pendingRequestCount}</Text></View>}
+              </Pressable>
+            </View>
+
+            {caregiverView === "medications" ? (
+              <>
+                <View style={styles.caregiverListHeader}>
+                  <View style={styles.caregiverListHeading}>
+                    <Text style={styles.caregiverSectionTitle}>Danh sách thuốc</Text>
+                    <Text style={styles.caregiverMuted}>Thông tin do người cao tuổi quản lý.</Text>
+                  </View>
+                  <Pressable accessibilityRole="button" disabled={busy} style={[styles.caregiverAddButton, busy && styles.disabled]} onPress={openCreate}>
+                    <Text style={styles.caregiverAddButtonText}>+ Đề xuất thêm</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.caregiverMedicineTabs}>
+                  <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === "active" }} onPress={() => setTab("active")} style={[styles.caregiverMedicineTab, tab === "active" && styles.caregiverMedicineTabActive]}>
+                    <Text style={[styles.caregiverMedicineTabText, tab === "active" && styles.caregiverMedicineTabTextActive]}>Đang dùng ({activeCount})</Text>
+                  </Pressable>
+                  <Pressable accessibilityRole="tab" accessibilityState={{ selected: tab === "inactive" }} onPress={() => setTab("inactive")} style={[styles.caregiverMedicineTab, tab === "inactive" && styles.caregiverMedicineTabActive]}>
+                    <Text style={[styles.caregiverMedicineTabText, tab === "inactive" && styles.caregiverMedicineTabTextActive]}>Đã ngừng ({(medications ?? []).filter(item => item.status === "inactive").length})</Text>
+                  </Pressable>
+                </View>
+
+                {visible.length === 0 ? (
+                  <View style={styles.caregiverEmpty}>
+                    <Text style={styles.caregiverEmptyTitle}>{tab === "active" ? "Chưa có thuốc đang sử dụng" : "Chưa có thuốc đã ngừng"}</Text>
+                    <Text style={styles.caregiverMuted}>{tab === "active" ? "Bạn có thể gửi đề xuất thêm thuốc để người cao tuổi xem xét." : "Các thuốc đã ngừng sẽ xuất hiện tại đây."}</Text>
+                    {tab === "active" && <Pressable style={styles.caregiverPrimaryButton} onPress={openCreate}><Text style={styles.caregiverPrimaryButtonText}>Đề xuất thêm thuốc</Text></Pressable>}
+                  </View>
+                ) : visible.map(item => {
+                  const expanded = expandedMedicationId === item.id;
+                  const showMore = moreMedicationActionsId === item.id;
+                  const latestStatusEvent = notifications?.find(event =>
+                    event.medicationId === item.id && (event.eventType === "medication_stopped" || event.eventType === "medication_reactivated")
+                  );
+                  const latestLog = intakeLogs?.find(log => log.medicationId === item.id);
+                  return (
+                    <View key={item.id} style={styles.caregiverMedicationCard}>
+                      <View style={styles.caregiverMedicationHeader}>
+                        <View style={styles.caregiverMedicineIcon}><Text style={styles.caregiverMedicineIconText}>Rx</Text></View>
+                        <View style={styles.caregiverMedicationNameWrap}>
+                          <Text style={styles.caregiverMedicationName}>{item.name}</Text>
+                          {!!item.strengthText && <Text style={styles.caregiverMuted}>{item.strengthText}</Text>}
+                        </View>
+                        <Text style={[styles.caregiverStatusBadge, item.status === "active" ? styles.caregiverStatusActive : styles.caregiverStatusInactive]}>{item.status === "active" ? "Đang dùng" : "Đã ngừng"}</Text>
+                      </View>
+
+                      <View style={styles.caregiverMedicationFacts}>
+                        <View style={styles.caregiverMedicationFact}>
+                          <Text style={styles.caregiverFactLabel}>LIỀU DÙNG</Text>
+                          <Text style={styles.caregiverFactValue}>{item.dosage} {item.dosageUnit}</Text>
+                        </View>
+                        <View style={styles.caregiverMedicationFact}>
+                          <Text style={styles.caregiverFactLabel}>GIỜ UỐNG</Text>
+                          <Text style={styles.caregiverFactValue}>{item.intakeTimes.length ? item.intakeTimes.join(" · ") : "Chưa thiết lập"}</Text>
+                        </View>
+                      </View>
+
+                      <Pressable accessibilityRole="button" accessibilityState={{ expanded }} style={styles.caregiverDetailsToggle} onPress={() => setExpandedMedicationId(expanded ? null : item.id)}>
+                        <Text style={styles.caregiverDetailsToggleText}>{expanded ? "Ẩn chi tiết" : "Xem chi tiết thuốc"}</Text>
+                        <Text style={styles.caregiverDetailsChevron}>{expanded ? "−" : "+"}</Text>
+                      </Pressable>
+
+                      {expanded && (
+                        <View style={styles.caregiverMedicationDetails}>
+                          <Text style={styles.caregiverDetailText}>Số lần sử dụng: {item.frequency} lần/ngày</Text>
+                          {!!item.directionsText && <Text style={styles.caregiverDetailText}>Hướng dẫn: {item.directionsText}</Text>}
+                          {!!item.startDate && <Text style={styles.caregiverDetailText}>Ngày bắt đầu: {item.startDate}</Text>}
+                          {!!item.endDate && <Text style={styles.caregiverDetailText}>Ngày kết thúc: {item.endDate}</Text>}
+                          {!!item.notes && <Text style={styles.caregiverDetailText}>Ghi chú: {item.notes}</Text>}
+                          {!!latestStatusEvent && <Text style={styles.caregiverMuted}>{latestStatusEvent.eventType === "medication_stopped" ? "Đã ngừng" : "Đã sử dụng lại"} lúc {latestStatusEvent.createdAt?.toDate().toLocaleString("vi-VN") ?? "Đang cập nhật"} · {latestStatusEvent.actorName}</Text>}
+                          {!!latestLog && <Text style={styles.caregiverMuted}>Ghi nhận gần nhất: {latestLog.takenAt?.toDate().toLocaleString("vi-VN") ?? "Đang cập nhật"} · {latestLog.recordedByRole === "caregiver" ? "Người chăm sóc" : "Người cao tuổi"}</Text>}
+                        </View>
+                      )}
+
+                      <View style={styles.caregiverMedicationActions}>
+                        {item.status === "active" && (
+                          <Pressable accessibilityRole="button" disabled={busy} style={[styles.caregiverPrimaryButton, styles.caregiverIntakeButton, busy && styles.disabled]} onPress={() => recordIntake(item)}>
+                            <Text style={styles.caregiverPrimaryButtonText}>✓  Đã uống thuốc</Text>
+                          </Pressable>
+                        )}
+                        <Pressable accessibilityRole="button" disabled={busy} style={[styles.caregiverSecondaryButton, busy && styles.disabled]} onPress={() => openEdit(item)}>
+                          <Text style={styles.caregiverSecondaryButtonText}>Đề xuất chỉnh sửa</Text>
+                        </Pressable>
+                      </View>
+
+                      <Pressable accessibilityRole="button" accessibilityState={{ expanded: showMore }} style={styles.caregiverMoreToggle} onPress={() => setMoreMedicationActionsId(showMore ? null : item.id)}>
+                        <Text style={styles.caregiverMoreToggleText}>{showMore ? "Ẩn thao tác khác" : "Thao tác khác"}</Text>
+                        <Text style={styles.caregiverMoreToggleText}>{showMore ? "−" : "+"}</Text>
+                      </Pressable>
+                      {showMore && (
+                        <View style={styles.caregiverMoreActions}>
+                          {item.status === "active" && <Pressable accessibilityRole="button" disabled={busy} style={[styles.caregiverWarningButton, busy && styles.disabled]} onPress={() => confirmStop(item)}><Text style={styles.caregiverWarningButtonText}>Đề xuất ngừng thuốc</Text></Pressable>}
+                          <Pressable accessibilityRole="button" disabled={busy} style={[styles.caregiverDangerButton, busy && styles.disabled]} onPress={() => confirmDelete(item)}><Text style={styles.caregiverDangerButtonText}>Đề xuất xóa thuốc</Text></Pressable>
+                        </View>
+                      )}
+                    </View>
+                  );
+                })}
+                <Text style={styles.caregiverPermissionNote}>Bạn có thể ghi nhận đã uống và gửi đề xuất. Danh sách thuốc chỉ thay đổi sau khi người cao tuổi xem xét và quyết định.</Text>
+              </>
+            ) : (
+              <>
+                <View style={styles.caregiverActivityHeader}>
+                  <Text style={styles.caregiverSectionTitle}>Hoạt động chăm sóc</Text>
+                  <Text style={styles.caregiverMuted}>Thông tin được cập nhật theo thời gian thực.</Text>
+                </View>
+                <View style={styles.caregiverActivityTabs}>
+                  <Pressable accessibilityRole="tab" accessibilityState={{ selected: activityTab === "notifications" }} style={[styles.caregiverActivityTab, activityTab === "notifications" && styles.caregiverActivityTabActive]} onPress={() => setActivityTab("notifications")}>
+                    <Text style={[styles.caregiverActivityTabText, activityTab === "notifications" && styles.caregiverActivityTabTextActive]}>Thông báo {notifications ? "(" + notifications.length + ")" : ""}</Text>
+                  </Pressable>
+                  <Pressable accessibilityRole="tab" accessibilityState={{ selected: activityTab === "requests" }} style={[styles.caregiverActivityTab, activityTab === "requests" && styles.caregiverActivityTabActive]} onPress={() => setActivityTab("requests")}>
+                    <Text style={[styles.caregiverActivityTabText, activityTab === "requests" && styles.caregiverActivityTabTextActive]}>Đề xuất {requests ? "(" + requests.length + ")" : ""}</Text>
+                  </Pressable>
+                  <Pressable accessibilityRole="tab" accessibilityState={{ selected: activityTab === "history" }} style={[styles.caregiverActivityTab, activityTab === "history" && styles.caregiverActivityTabActive]} onPress={() => setActivityTab("history")}>
+                    <Text style={[styles.caregiverActivityTabText, activityTab === "history" && styles.caregiverActivityTabTextActive]}>Lịch sử {intakeLogs ? "(" + intakeLogs.length + ")" : ""}</Text>
+                  </Pressable>
+                </View>
+
+                {activityTab === "notifications" && (
+                  <>
+                    {!!notificationError && <Text style={styles.caregiverErrorText}>{notificationError}</Text>}
+                    {notifications === null && !notificationError ? (
+                      <View style={styles.caregiverLoading}><ActivityIndicator color={colors.primary} /><Text style={styles.caregiverMuted}>Đang tải thông báo...</Text></View>
+                    ) : notifications?.length === 0 ? (
+                      <View style={styles.caregiverEmpty}><Text style={styles.caregiverEmptyTitle}>Chưa có thông báo thuốc</Text><Text style={styles.caregiverMuted}>Các cập nhật và quyết định liên quan đến thuốc sẽ xuất hiện tại đây.</Text></View>
+                    ) : (notifications ?? []).slice(0, showAllNotifications ? 100 : 8).map(item => {
+                      const tone = notificationTone(item);
+                      const symbol = item.eventType === "proposal_submitted" ? "+" : item.eventType === "proposal_reviewed" ? (item.decision === "approved" ? "✓" : "×") : item.eventType === "medication_stopped" ? "!" : "↻";
+                      return (
+                        <View key={item.id} style={styles.caregiverEventCard}>
+                          <View style={[styles.caregiverEventIcon, tone === "success" && styles.caregiverEventIconSuccess, tone === "warning" && styles.caregiverEventIconWarning, tone === "danger" && styles.caregiverEventIconDanger]}>
+                            <Text style={styles.caregiverEventIconText}>{symbol}</Text>
+                          </View>
+                          <View style={styles.caregiverEventCopy}>
+                            <Text style={styles.caregiverEventMessage}>{notificationMessage(item)}</Text>
+                            <Text style={styles.caregiverEventMeta}>{item.actorName} · {item.actorRole === "caregiver" ? "Người chăm sóc" : "Người cao tuổi"}</Text>
+                            <Text style={styles.caregiverEventTime}>{item.createdAt?.toDate().toLocaleString("vi-VN") ?? "Đang cập nhật"}</Text>
+                          </View>
+                        </View>
+                      );
+                    })}
+                    {(notifications?.length ?? 0) > 8 && <Pressable style={styles.caregiverShowMore} onPress={() => setShowAllNotifications(value => !value)}><Text style={styles.caregiverShowMoreText}>{showAllNotifications ? "Thu gọn thông báo" : "Xem thêm thông báo"}</Text></Pressable>}
+                  </>
+                )}
+
+                {activityTab === "requests" && (
+                  <>
+                    {!!requestError && <Text style={styles.caregiverErrorText}>{requestError}</Text>}
+                    {requests === null && !requestError ? (
+                      <View style={styles.caregiverLoading}><ActivityIndicator color={colors.primary} /><Text style={styles.caregiverMuted}>Đang tải đề xuất...</Text></View>
+                    ) : requests?.length === 0 ? (
+                      <View style={styles.caregiverEmpty}><Text style={styles.caregiverEmptyTitle}>Bạn chưa gửi đề xuất nào</Text><Text style={styles.caregiverMuted}>Khi cần thêm, sửa, ngừng hoặc xóa thuốc, bạn có thể gửi đề xuất từ thẻ thuốc.</Text></View>
+                    ) : (requests ?? []).slice(0, showAllRequests ? 50 : 8).map(request => {
+                      const expanded = expandedRequestId === request.id;
+                      const currentMedication = request.medicationId ? medications?.find(item => item.id === request.medicationId) : undefined;
+                      const proposal = request.proposedData;
+                      return (
+                        <View key={request.id} style={styles.caregiverRequestCard}>
+                          <View style={styles.caregiverRequestTop}>
+                            <View style={styles.caregiverRequestCopy}>
+                              <Text style={styles.caregiverRequestTitle}>{requestTypeLabel(request.requestType)} · {request.medicationName}</Text>
+                              <Text style={styles.caregiverEventTime}>{request.createdAt?.toDate().toLocaleString("vi-VN") ?? "Đang cập nhật"}</Text>
+                            </View>
+                            <Text style={[styles.caregiverRequestStatus, request.status === "pending" ? styles.caregiverRequestPending : request.status === "approved" ? styles.caregiverRequestApproved : styles.caregiverRequestRejected]}>{requestStatusShortLabel(request.status)}</Text>
+                          </View>
+                          {!!currentMedication && <Text style={styles.caregiverDetailText}>Thông tin hiện tại: {currentMedication.dosage} {currentMedication.dosageUnit} · {currentMedication.frequency} lần/ngày</Text>}
+                          <Pressable accessibilityRole="button" accessibilityState={{ expanded }} style={styles.caregiverDetailsToggle} onPress={() => setExpandedRequestId(expanded ? null : request.id)}>
+                            <Text style={styles.caregiverDetailsToggleText}>{expanded ? "Ẩn nội dung" : "Xem nội dung đề xuất"}</Text>
+                            <Text style={styles.caregiverDetailsChevron}>{expanded ? "−" : "+"}</Text>
+                          </Pressable>
+                          {expanded && (
+                            <View style={styles.caregiverMedicationDetails}>
+                              {!!proposal && <>
+                                <Text style={styles.caregiverDetailText}>Tên thuốc: {proposal.name}{proposal.strengthText ? " · " + proposal.strengthText : ""}</Text>
+                                <Text style={styles.caregiverDetailText}>Liều dùng: {proposal.dosage} {proposal.dosageUnit}</Text>
+                                <Text style={styles.caregiverDetailText}>Số lần: {proposal.frequency} lần/ngày · Giờ: {proposal.intakeTimes.join(" · ")}</Text>
+                                {!!proposal.directionsText && <Text style={styles.caregiverDetailText}>Hướng dẫn: {proposal.directionsText}</Text>}
+                                <Text style={styles.caregiverDetailText}>Thời gian: {proposal.startDate || "Chưa đặt ngày bắt đầu"} – {proposal.endDate || "Không đặt ngày kết thúc"}</Text>
+                                {!!proposal.notes && <Text style={styles.caregiverDetailText}>Ghi chú: {proposal.notes}</Text>}
+                              </>}
+                              {!!request.reason && <Text style={styles.caregiverDetailText}>Lý do: {request.reason}</Text>}
+                              {!!request.reviewNote && <Text style={styles.caregiverDetailText}>Phản hồi: {request.reviewNote}</Text>}
+                            </View>
+                          )}
+                        </View>
+                      );
+                    })}
+                    {(requests?.length ?? 0) > 8 && <Pressable style={styles.caregiverShowMore} onPress={() => setShowAllRequests(value => !value)}><Text style={styles.caregiverShowMoreText}>{showAllRequests ? "Thu gọn đề xuất" : "Xem thêm đề xuất"}</Text></Pressable>}
+                  </>
+                )}
+
+                {activityTab === "history" && (
+                  <>
+                    <Text style={styles.caregiverHistoryNote}>Nhật ký do người cao tuổi hoặc người chăm sóc ghi nhận; đây không phải xác minh y tế độc lập. Hiển thị tối đa 30 lần gần nhất.</Text>
+                    {!!intakeError && <Text style={styles.caregiverErrorText}>{intakeError}</Text>}
+                    {intakeLogs === null && !intakeError ? (
+                      <View style={styles.caregiverLoading}><ActivityIndicator color={colors.primary} /><Text style={styles.caregiverMuted}>Đang tải lịch sử...</Text></View>
+                    ) : intakeLogs?.length === 0 ? (
+                      <View style={styles.caregiverEmpty}><Text style={styles.caregiverEmptyTitle}>Chưa có lần uống thuốc được ghi nhận</Text><Text style={styles.caregiverMuted}>Các lần ghi nhận sẽ xuất hiện tại đây theo thời gian.</Text></View>
+                    ) : (intakeLogs ?? []).slice(0, showAllHistory ? 30 : 8).map(log => (
+                      <View key={log.id} style={styles.caregiverHistoryItem}>
+                        <View style={styles.caregiverHistoryRail}><View style={styles.caregiverHistoryDot} /><View style={styles.caregiverHistoryLine} /></View>
+                        <View style={styles.caregiverHistoryCopy}>
+                          <Text style={styles.caregiverEventMessage}>{log.medicationName}</Text>
+                          <Text style={styles.caregiverEventTime}>{log.takenAt?.toDate().toLocaleString("vi-VN") ?? "Đang cập nhật"}</Text>
+                          <Text style={styles.caregiverEventMeta}>Ghi nhận bởi {log.recordedByRole === "caregiver" ? "người chăm sóc" : "người cao tuổi"}</Text>
+                          {!!log.note && <Text style={styles.caregiverDetailText}>Ghi chú: {log.note}</Text>}
+                        </View>
+                      </View>
+                    ))}
+                    {(intakeLogs?.length ?? 0) > 8 && <Pressable style={styles.caregiverShowMore} onPress={() => setShowAllHistory(value => !value)}><Text style={styles.caregiverShowMoreText}>{showAllHistory ? "Thu gọn lịch sử" : "Xem thêm lịch sử"}</Text></Pressable>}
+                  </>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        <Modal visible={editor && isReady && editorOwner === scope} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { if (!busy) { setEditor(false); setCalendar(null); } }}>
+          <KeyboardAvoidingView style={styles.modal} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+            <View style={styles.modalHeader}>
+              <Pressable disabled={busy} onPress={() => setEditor(false)}><Text style={styles.modalCancel}>Đóng</Text></Pressable>
+              <Text style={styles.modalTitle}>{editing ? "Đề xuất thay đổi thuốc" : "Đề xuất thêm thuốc"}</Text>
+              <Pressable disabled={busy} onPress={() => void submit()}><Text style={styles.modalSave}>{busy ? "Đang gửi..." : "Gửi"}</Text></Pressable>
+            </View>
+            <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
+              <Field label="Tên thuốc *" value={draft.name} onChange={value => patch("name", value)} placeholder="Ví dụ: Paracetamol" />
+              <Field label="Hàm lượng" value={draft.strengthText} onChange={value => patch("strengthText", value)} placeholder="Ví dụ: 500 mg" />
+              <View style={styles.row}>
+                <View style={styles.half}><Field label="Liều lượng *" value={draft.dosage} onChange={value => patch("dosage", value)} placeholder="Ví dụ: 1" /></View>
+                <View style={styles.half}><Field label="Đơn vị *" value={draft.dosageUnit} onChange={value => patch("dosageUnit", value)} placeholder="viên" /></View>
+              </View>
+              <Text style={styles.fieldLabel}>Dạng thuốc</Text>
+              <View style={styles.formChoices}>{MEDICATION_FORMS.map(form => <Pressable key={form.value} onPress={() => patch("dosageForm", form.value as MedicationForm)} style={[styles.choice, draft.dosageForm === form.value && styles.choiceActive]}><Text style={[styles.choiceText, draft.dosageForm === form.value && styles.choiceTextActive]}>{form.label}</Text></Pressable>)}</View>
+              <Text style={styles.fieldLabel}>Số lần sử dụng trong ngày</Text>
+              <View style={styles.frequencyRow}>
+                <Pressable accessibilityLabel="Giảm số lần" disabled={busy || draft.frequency <= 1} onPress={() => changeFrequency(draft.frequency - 1)} style={[styles.stepButton, draft.frequency <= 1 && styles.disabled]}><Text style={styles.stepText}>−</Text></Pressable>
+                <Text style={styles.frequencyValue}>{draft.frequency} lần/ngày</Text>
+                <Pressable accessibilityLabel="Tăng số lần" disabled={busy || draft.frequency >= 6} onPress={() => changeFrequency(draft.frequency + 1)} style={[styles.stepButton, draft.frequency >= 6 && styles.disabled]}><Text style={styles.stepText}>+</Text></Pressable>
+              </View>
+              <Text style={styles.muted}>Chọn từ 1 đến 6 lần theo đơn thuốc.</Text>
+              {draft.intakeTimes.map((time, index) => <Field key={index} label={"Giờ uống lần " + (index + 1)} value={time} onChange={value => patch("intakeTimes", draft.intakeTimes.map((current, i) => i === index ? value : current))} placeholder="08:00" />)}
+              <Field label="Hướng dẫn sử dụng" value={draft.directionsText} onChange={value => patch("directionsText", value)} placeholder="Theo chỉ định của bác sĩ" multiline />
+              <CalendarField label="Ngày bắt đầu" value={draft.startDate} expanded={calendar === "startDate"} onToggle={() => { Keyboard.dismiss(); setCalendar(calendar === "startDate" ? null : "startDate"); }} onSelect={value => { patch("startDate", value); setCalendar(null); }} />
+              <CalendarField label="Ngày kết thúc (nếu có)" value={draft.endDate} minDate={draft.startDate} expanded={calendar === "endDate"} onToggle={() => { Keyboard.dismiss(); setCalendar(calendar === "endDate" ? null : "endDate"); }} onSelect={value => { patch("endDate", value); setCalendar(null); }} />
+              <Field label="Ghi chú" value={draft.notes} onChange={value => patch("notes", value)} placeholder="Ghi chú thêm" multiline />
+              <Field label="Lý do/ghi chú đề xuất" value={requestReason} onChange={setRequestReason} placeholder="Nêu lý do cần người cao tuổi xem xét" multiline />
+              <Text style={styles.disclaimer}>Đây chỉ là đề xuất. Danh sách thuốc không thay đổi cho đến khi người cao tuổi duyệt.</Text>
+              <Pressable disabled={busy} style={[styles.caregiverPrimaryButton, busy && styles.disabled]} onPress={() => void submit()}><Text style={styles.caregiverPrimaryButtonText}>{busy ? "Đang gửi..." : "Gửi đề xuất"}</Text></Pressable>
+            </ScrollView>
+          </KeyboardAvoidingView>
+        </Modal>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.panel}>
       <View style={styles.heading}>
@@ -594,6 +974,21 @@ function requestAction(type: MedicationRequestType | null) {
     case "stop": return "ngừng";
     case "delete": return "xóa";
     default: return "thay đổi";
+  }
+}
+
+function notificationTone(item: MedicationNotificationRecord): "info" | "success" | "warning" | "danger" {
+  if (item.eventType === "proposal_reviewed") return item.decision === "approved" ? "success" : "danger";
+  if (item.eventType === "medication_stopped") return "warning";
+  if (item.eventType === "medication_reactivated") return "success";
+  return "info";
+}
+
+function requestStatusShortLabel(status: MedicationRequestRecord["status"]) {
+  switch (status) {
+    case "pending": return "Chờ duyệt";
+    case "approved": return "Đã duyệt";
+    case "rejected": return "Bị từ chối";
   }
 }
 
