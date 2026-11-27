@@ -31,8 +31,15 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
   const family = profile.role === "family";
   const [connections, setConnections] = useState<ConnectionRecord[] | null>(family ? null : []);
   const [seniorUid, setSeniorUid] = useState(family ? "" : user.uid);
-  const [medications, setMedications] = useState<MedicationRecord[] | null>(null);
-  const [loadError, setLoadError] = useState("");
+  const [medicationSnapshot, setMedicationSnapshot] = useState<{
+    seniorUid: string;
+    medications: MedicationRecord[];
+  } | null>(null);
+  const [medicationFailure, setMedicationFailure] = useState<{
+    seniorUid: string;
+    message: string;
+  } | null>(null);
+  const [connectionError, setConnectionError] = useState("");
   const [tab, setTab] = useState<"active" | "inactive">("active");
   const [editor, setEditor] = useState(false);
   const [editing, setEditing] = useState<MedicationRecord | null>(null);
@@ -41,33 +48,47 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
 
   useEffect(() => {
     if (!family) return;
-    return watchConnections(user.uid, "family", setConnections, error => setLoadError(medicationErrorMessage(error)));
+    return watchConnections(
+      user.uid,
+      "family",
+      value => {
+        setConnections(value);
+        setConnectionError("");
+      },
+      error => setConnectionError(medicationErrorMessage(error)),
+    );
   }, [family, user.uid]);
 
-  useEffect(() => {
-    if (family && connections && seniorUid && !connections.some(item => item.seniorUid === seniorUid)) {
-      setSeniorUid("");
-      setMedications(null);
-    }
-  }, [family, connections, seniorUid]);
+  const selectedSeniorUid = family
+    ? (connections && seniorUid && !connections.some(item => item.seniorUid === seniorUid) ? "" : seniorUid)
+    : user.uid;
 
   useEffect(() => {
-    setMedications(null);
-    setLoadError("");
-    if (!seniorUid) return;
+    if (!selectedSeniorUid) return;
     return watchMedications(
-      seniorUid,
-      setMedications,
-      error => setLoadError(medicationErrorMessage(error)),
+      selectedSeniorUid,
+      value => setMedicationSnapshot({ seniorUid: selectedSeniorUid, medications: value }),
+      error => setMedicationFailure({
+        seniorUid: selectedSeniorUid,
+        message: medicationErrorMessage(error),
+      }),
     );
-  }, [seniorUid]);
+  }, [selectedSeniorUid]);
+
+  const medications = selectedSeniorUid && medicationSnapshot?.seniorUid === selectedSeniorUid
+    ? medicationSnapshot.medications
+    : null;
+  const medicationError = selectedSeniorUid && medicationFailure?.seniorUid === selectedSeniorUid
+    ? medicationFailure.message
+    : "";
+  const loadError = connectionError || medicationError;
 
   const visible = useMemo(
     () => (medications ?? []).filter(item => item.status === tab),
     [medications, tab],
   );
   const activeCount = (medications ?? []).filter(item => item.status === "active").length;
-  const selectedSenior = connections?.find(item => item.seniorUid === seniorUid);
+  const selectedSenior = connections?.find(item => item.seniorUid === selectedSeniorUid);
 
   function openCreate() {
     setEditing(null);
@@ -109,7 +130,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
     }
     setBusy(true);
     try {
-      await saveMedication(user, profile, seniorUid, editing, normalizeMedicationDraft(draft));
+      await saveMedication(user, profile, selectedSeniorUid, editing, normalizeMedicationDraft(draft));
       setEditor(false);
       Alert.alert("Quản lý thuốc", editing ? "Đã cập nhật thông tin thuốc." : "Đã thêm thuốc mới.");
     } catch (error) {
@@ -122,14 +143,14 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
   function confirmStop(item: MedicationRecord) {
     Alert.alert("Ngừng sử dụng thuốc?", "Thuốc sẽ chuyển sang mục Đã ngừng. Dữ liệu vẫn được lưu.", [
       { text: "Để sau", style: "cancel" },
-      { text: "Ngừng sử dụng", style: "destructive", onPress: () => void perform(() => stopMedication(user, profile, seniorUid, item), "Đã ngừng sử dụng thuốc.") },
+      { text: "Ngừng sử dụng", style: "destructive", onPress: () => void perform(() => stopMedication(user, profile, selectedSeniorUid, item), "Đã ngừng sử dụng thuốc.") },
     ]);
   }
 
   function confirmDelete(item: MedicationRecord) {
     Alert.alert("Xóa thuốc?", "Thuốc sẽ được ẩn khỏi danh sách. Dữ liệu không bị xóa vĩnh viễn.", [
       { text: "Hủy", style: "cancel" },
-      { text: "Xóa thuốc", style: "destructive", onPress: () => void perform(() => deleteMedication(user, profile, seniorUid, item), "Đã chuyển thuốc vào mục đã xóa.") },
+      { text: "Xóa thuốc", style: "destructive", onPress: () => void perform(() => deleteMedication(user, profile, selectedSeniorUid, item), "Đã chuyển thuốc vào mục đã xóa.") },
     ]);
   }
 
@@ -146,7 +167,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
     }
   }
 
-  const isReady = !!seniorUid && medications !== null && !loadError;
+  const isReady = !!selectedSeniorUid && medications !== null && !loadError;
 
   return (
     <View style={styles.panel}>
@@ -173,8 +194,8 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
       )}
 
       {!!loadError && <Text style={styles.error}>{loadError}</Text>}
-      {!seniorUid && family && <Text style={styles.empty}>Chọn một người cao tuổi để xem danh sách thuốc.</Text>}
-      {seniorUid && medications === null && !loadError && <View style={styles.loading}><ActivityIndicator color={colors.primary} /><Text style={styles.muted}>Đang tải danh sách thuốc...</Text></View>}
+      {!selectedSeniorUid && family && <Text style={styles.empty}>Chọn một người cao tuổi để xem danh sách thuốc.</Text>}
+      {selectedSeniorUid && medications === null && !loadError && <View style={styles.loading}><ActivityIndicator color={colors.primary} /><Text style={styles.muted}>Đang tải danh sách thuốc...</Text></View>}
 
       {isReady && (
         <>
