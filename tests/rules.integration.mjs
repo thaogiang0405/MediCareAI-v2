@@ -513,6 +513,14 @@ test("Phase 04: connected caregiver can read medications and submit proposals, b
     updatedAt: serverTimestamp(),
     reviewNote: "",
   }));
+  await assertFails(updateDoc(requestRef, {
+    reason: "Người chăm sóc sửa đề xuất đã gửi.",
+  }));
+  await assertFails(deleteDoc(requestRef));
+  await assertFails(getDocs(query(
+    collection(caregiver, "elderlyProfiles", "s1", "medicationRequests"),
+    where("requestedByUid", "==", "f2"),
+  )));
 
   const ownerRequestRef = doc(senior, "elderlyProfiles", "s1", "medicationRequests", "request-1");
   await assertSucceeds(getDoc(ownerRequestRef));
@@ -588,7 +596,7 @@ test("Phase 04: owner approval applies a caregiver proposal atomically; rejectio
   await assertSucceeds(runTransaction(senior, async transaction => {
     const requestSnapshot = await transaction.get(ownerCreateRequestRef);
     transaction.set(newMedicationRef, {
-      ...medicationProposal({ name: "Thuốc do người thân đề xuất" }),
+      ...medicationProposal(),
       ownerUid: "s1",
       createdByUid: "s1",
       updatedByUid: "s1",
