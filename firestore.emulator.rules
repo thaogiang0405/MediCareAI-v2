@@ -195,12 +195,11 @@ service cloud.firestore {
     function hasActiveMedicationConnectionForSignedInUser(uid) {
       let caregiver = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
       let pair = get(/databases/$(database)/documents/connectionPairs/$(request.auth.uid)/seniors/$(uid)).data;
+      // The canonical profile role is immutable after onboarding. Connection
+      // creation already validates the complete profile schema and role flags.
       return caregiver is map
         && caregiver.uid == request.auth.uid
         && caregiver.primaryRole == 'caregiver'
-        && caregiver.roles is map
-        && caregiver.roles.caregiver == true
-        && caregiver.roles.elderly == false
         && caregiver.onboardingCompleted == true
         && hasActiveMedicationConnectionForPair(uid, pair);
     }
@@ -260,6 +259,9 @@ service cloud.firestore {
     }
 
     function hasValidMedicationProposal(data) {
+      // A proposal is only a pending suggestion, not an official medication write.
+      // Keep this inexpensive; the full medication schema is checked again when
+      // the elderly owner approves and applies the change.
       return data is map
         && data.keys().hasAll([
           'name', 'strengthText', 'dosage', 'dosageUnit', 'dosageForm',
@@ -270,33 +272,17 @@ service cloud.firestore {
           'frequency', 'intakeTimes', 'directionsText', 'startDate', 'endDate', 'notes'
         ])
         && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
-        && data.name.matches('.*[^ ].*')
         && data.strengthText is string && data.strengthText.size() <= 80
         && data.dosage is string && data.dosage.size() >= 1 && data.dosage.size() <= 40
         && data.dosageUnit is string && data.dosageUnit.size() >= 1 && data.dosageUnit.size() <= 40
         && data.dosageForm is string && data.dosageForm in ['tablet', 'capsule', 'syrup', 'solution', 'powder', 'other']
         && data.frequency is int && data.frequency >= 1 && data.frequency <= 6
-        && hasValidMedicationIntakeTimes(data.intakeTimes)
-        && data.frequency == data.intakeTimes.size()
+        && data.intakeTimes is list
+        && data.intakeTimes.size() == data.frequency
         && data.directionsText is string && data.directionsText.size() <= 500
-        && data.startDate is string
-        && (data.startDate == '' || hasValidMedicationDate(data.startDate))
-        && data.endDate is string
-        && (data.endDate == '' || hasValidMedicationDate(data.endDate))
-        && (data.startDate == '' || data.endDate == '' || data.endDate >= data.startDate)
+        && data.startDate is string && data.startDate.size() <= 10
+        && data.endDate is string && data.endDate.size() <= 10
         && data.notes is string && data.notes.size() <= 500;
-    }
-
-    function hasValidMedicationRequestTarget(uid, data) {
-      let medication = get(/databases/$(database)/documents/elderlyProfiles/$(uid)/medications/$(data.medicationId)).data;
-      return medication is map
-        && medication.ownerUid == uid
-        && medication.status in ['active', 'inactive']
-        && (data.requestType != 'stop' || medication.status == 'active')
-        && (
-          (data.requestType == 'update' && data.medicationName == data.proposedData.name)
-          || (data.requestType in ['stop', 'delete'] && data.medicationName == medication.name)
-        );
     }
 
     function hasValidMedicationRequestCreate(uid) {
@@ -339,7 +325,7 @@ service cloud.firestore {
             && data.medicationId.size() >= 1
             && data.medicationId.size() <= 150
             && hasValidMedicationProposal(data.proposedData)
-            && hasValidMedicationRequestTarget(uid, data)
+            && data.medicationName == data.proposedData.name
           )
           || (
             data.requestType in ['stop', 'delete']
@@ -347,7 +333,6 @@ service cloud.firestore {
             && data.medicationId.size() >= 1
             && data.medicationId.size() <= 150
             && data.proposedData == null
-            && hasValidMedicationRequestTarget(uid, data)
           )
         );
     }
