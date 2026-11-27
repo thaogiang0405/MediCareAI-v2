@@ -8,8 +8,10 @@ import type { Profile } from "@/features/profile/profile";
 import { colors } from "@/theme";
 import { watchConnections, type ConnectionRecord } from "@/features/connection/connection";
 import {
-  deleteMedication, medicationErrorMessage, saveMedication, stopMedication,
-  watchMedications, type MedicationRecord,
+  createMedicationRequest, deleteMedication, medicationErrorMessage, recordMedicationIntake,
+  reviewMedicationRequest, saveMedication, stopMedication, watchMedicationIntakeLogs,
+  watchMedicationRequests, watchMedications, type MedicationIntakeLogRecord,
+  type MedicationRecord, type MedicationRequestRecord, type MedicationRequestType,
 } from "./medication";
 import {
   MEDICATION_FORMS, medicationValidationError, normalizeMedicationDraft, isCalendarDate,
@@ -49,6 +51,11 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
   const [retry, setRetry] = useState(0);
   const [editorOwner, setEditorOwner] = useState("");
   const [calendar, setCalendar] = useState<"startDate" | "endDate" | null>(null);
+  const [requestReason, setRequestReason] = useState("");
+  const [requestSnapshot, setRequestSnapshot] = useState<{ scope: string; items: MedicationRequestRecord[] } | null>(null);
+  const [intakeSnapshot, setIntakeSnapshot] = useState<{ scope: string; items: MedicationIntakeLogRecord[] } | null>(null);
+  const [requestError, setRequestError] = useState("");
+  const [intakeError, setIntakeError] = useState("");
 
   useEffect(() => {
     if (!family) return;
@@ -84,6 +91,47 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
     );
   }, [selectedSeniorUid, scope]);
 
+  useEffect(() => {
+    if (!selectedSeniorUid) {
+      setRequestSnapshot(null);
+      return;
+    }
+    return watchMedicationRequests(
+      selectedSeniorUid,
+      user.uid,
+      profile.role,
+      value => {
+        setRequestSnapshot({ scope, items: value });
+        setRequestError("");
+      },
+      error => {
+        setRequestSnapshot(null);
+        setRequestError(medicationErrorMessage(error));
+      },
+    );
+  }, [selectedSeniorUid, scope, user.uid, profile.role]);
+
+  useEffect(() => {
+    if (!selectedSeniorUid) {
+      setIntakeSnapshot(null);
+      return;
+    }
+    return watchMedicationIntakeLogs(
+      selectedSeniorUid,
+      value => {
+        setIntakeSnapshot({ scope, items: value });
+        setIntakeError("");
+      },
+      error => {
+        setIntakeSnapshot(null);
+        setIntakeError(medicationErrorMessage(error));
+      },
+    );
+  }, [selectedSeniorUid, scope]);
+
+  const requests = scope && requestSnapshot?.scope === scope ? requestSnapshot.items : null;
+  const intakeLogs = scope && intakeSnapshot?.scope === scope ? intakeSnapshot.items : null;
+
   const medications = scope && medicationSnapshot?.scope === scope
     ? medicationSnapshot.medications
     : null;
@@ -102,6 +150,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
     setEditorOwner(scope);
     setCalendar(null);
     setEditing(null);
+    setRequestReason("");
     setDraft(EMPTY);
     setEditor(true);
   }
@@ -110,6 +159,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
     setEditorOwner(scope);
     setCalendar(null);
     setEditing(item);
+    setRequestReason("");
     setDraft({
       name: item.name, strengthText: item.strengthText, dosage: item.dosage,
       dosageUnit: item.dosageUnit, dosageForm: item.dosageForm,
@@ -143,9 +193,23 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
     actionLock.current = true;
     setBusy(true);
     try {
-      await saveMedication(user, profile, selectedSeniorUid, editing, normalizeMedicationDraft(draft));
+      const normalized = normalizeMedicationDraft(draft);
+      if (family) {
+        await createMedicationRequest(
+          user, profile, selectedSeniorUid,
+          editing ? "update" : "create",
+          editing?.id ?? null,
+          normalized.name,
+          normalized,
+          requestReason,
+        );
+      } else {
+        await saveMedication(user, profile, selectedSeniorUid, editing, normalized);
+      }
       setEditor(false);
-      Alert.alert("Quản lý thuốc", editing ? "Đã cập nhật thông tin thuốc." : "Đã thêm thuốc mới.");
+      Alert.alert("Quản lý thuốc", family
+        ? "Đã gửi đề xuất đến người cao tuổi để xem xét."
+        : (editing ? "Đã cập nhật thông tin thuốc." : "Đã thêm thuốc mới."));
     } catch (error) {
       Alert.alert("Quản lý thuốc", medicationErrorMessage(error));
     } finally {
@@ -155,17 +219,71 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
   }
 
   function confirmStop(item: MedicationRecord) {
-    Alert.alert("Ngừng sử dụng thuốc?", "Thuốc sẽ chuyển sang mục Đã ngừng. Dữ liệu vẫn được lưu.", [
+    const title = family ? "Đề xuất ngừng thuốc?" : "Ngừng sử dụng thuốc?";
+    const message = family
+      ? "Đề xuất sẽ được gửi cho người cao tuổi. Thuốc vẫn được giữ nguyên cho đến khi họ quyết định."
+      : "Thuốc sẽ chuyển sang mục Đã ngừng. Dữ liệu vẫn được lưu.";
+    Alert.alert(title, message, [
       { text: "Để sau", style: "cancel" },
-      { text: "Ngừng sử dụng", style: "destructive", onPress: () => void perform(() => stopMedication(user, profile, selectedSeniorUid, item), "Đã ngừng sử dụng thuốc.") },
+      {
+        text: family ? "Gửi đề xuất" : "Ngừng sử dụng",
+        style: "destructive",
+        onPress: () => void perform(
+          () => family
+            ? createMedicationRequest(user, profile, selectedSeniorUid, "stop", item.id, item.name, null, "Đề xuất ngừng sử dụng thuốc.")
+            : stopMedication(user, profile, selectedSeniorUid, item),
+          family ? "Đã gửi đề xuất ngừng thuốc." : "Đã ngừng sử dụng thuốc.",
+        ),
+      },
     ]);
   }
 
   function confirmDelete(item: MedicationRecord) {
-    Alert.alert("Xóa thuốc?", "Thuốc sẽ được ẩn khỏi danh sách. Dữ liệu không bị xóa vĩnh viễn.", [
+    const title = family ? "Đề xuất xóa thuốc?" : "Xóa thuốc?";
+    const message = family
+      ? "Đề xuất sẽ được gửi cho người cao tuổi. Thuốc chưa bị xóa khỏi danh sách."
+      : "Thuốc sẽ được ẩn khỏi danh sách. Dữ liệu không bị xóa vĩnh viễn.";
+    Alert.alert(title, message, [
       { text: "Hủy", style: "cancel" },
-      { text: "Xóa thuốc", style: "destructive", onPress: () => void perform(() => deleteMedication(user, profile, selectedSeniorUid, item), "Đã chuyển thuốc vào mục đã xóa.") },
+      {
+        text: family ? "Gửi đề xuất" : "Xóa thuốc",
+        style: "destructive",
+        onPress: () => void perform(
+          () => family
+            ? createMedicationRequest(user, profile, selectedSeniorUid, "delete", item.id, item.name, null, "Đề xuất xóa thuốc.")
+            : deleteMedication(user, profile, selectedSeniorUid, item),
+          family ? "Đã gửi đề xuất xóa thuốc." : "Đã chuyển thuốc vào mục đã xóa.",
+        ),
+      },
     ]);
+  }
+
+  function confirmReview(item: MedicationRequestRecord, decision: "approved" | "rejected") {
+    const approve = decision === "approved";
+    Alert.alert(
+      approve ? "Duyệt đề xuất?" : "Từ chối đề xuất?",
+      approve
+        ? "Nếu đồng ý, thay đổi sẽ được áp dụng vào danh sách thuốc chính thức."
+        : "Đề xuất sẽ được đánh dấu từ chối; danh sách thuốc không thay đổi.",
+      [
+        { text: "Để sau", style: "cancel" },
+        {
+          text: approve ? "Đồng ý" : "Từ chối",
+          style: approve ? "default" : "destructive",
+          onPress: () => void perform(
+            () => reviewMedicationRequest(user, profile, selectedSeniorUid, item, decision),
+            approve ? "Đã duyệt và áp dụng đề xuất." : "Đã từ chối đề xuất.",
+          ),
+        },
+      ],
+    );
+  }
+
+  function recordIntake(item: MedicationRecord) {
+    void perform(
+      () => recordMedicationIntake(user, profile, selectedSeniorUid, item),
+      "Đã ghi nhận uống thuốc.",
+    );
   }
 
   async function perform(task: () => Promise<void>, success: string) {
@@ -190,7 +308,9 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
       <View style={styles.heading}>
         <View style={styles.flex}>
           <Text style={styles.title}>{family ? "Quản lý thuốc người thân" : "Thuốc của tôi"}</Text>
-          <Text style={styles.subtitle}>{family ? "Chọn người cao tuổi để xem và hỗ trợ quản lý thuốc." : "Theo dõi danh sách thuốc đang sử dụng."}</Text>
+          <Text style={styles.subtitle}>{family
+            ? "Bạn có thể xem thuốc, ghi nhận đã uống và gửi đề xuất. Chỉ người cao tuổi quyết định thay đổi danh sách thuốc."
+            : "Bạn quyết định và quản lý danh sách thuốc của mình. Người chăm sóc chỉ có thể gửi đề xuất."}</Text>
         </View>
         <View style={styles.count}><Text style={styles.countText}>{isReady ? activeCount : "—"}</Text></View>
       </View>
@@ -215,6 +335,31 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
 
       {isReady && (
         <>
+          <View style={styles.requestPanel}>
+            <Text style={styles.requestHeading}>{family ? "Đề xuất của bạn" : "Đề xuất từ người chăm sóc"}</Text>
+            {requestError ? <Text style={styles.error}>{requestError}</Text> : requests === null
+              ? <View style={styles.loading}><ActivityIndicator color={colors.primary} /><Text style={styles.muted}>Đang tải đề xuất...</Text></View>
+              : requests.length === 0
+                ? <Text style={styles.muted}>{family ? "Bạn chưa gửi đề xuất nào." : "Chưa có đề xuất cần xem xét."}</Text>
+                : requests.slice(0, 8).map(request => (
+                  <View key={request.id} style={styles.requestCard}>
+                    <Text style={styles.medicationName}>{requestTypeLabel(request.requestType)}: {request.medicationName}</Text>
+                    <Text style={styles.muted}>Người gửi: {request.requestedByUid.slice(0, 8)} · {requestStatusLabel(request.status)}</Text>
+                    {!!request.proposedData && <Text style={styles.detail}>
+                      Đề xuất: {request.proposedData.dosage} {request.proposedData.dosageUnit}, {request.proposedData.frequency} lần/ngày ({request.proposedData.intakeTimes.join(" · ")})
+                    </Text>}
+                    {!!request.reason && <Text style={styles.detail}>Lý do: {request.reason}</Text>}
+                    {!!request.reviewNote && <Text style={styles.detail}>Phản hồi: {request.reviewNote}</Text>}
+                    {!family && request.status === "pending" && (
+                      <View style={styles.actions}>
+                        <Pressable disabled={busy} style={styles.primaryButton} onPress={() => confirmReview(request, "approved")}><Text style={styles.primaryText}>Duyệt và áp dụng</Text></Pressable>
+                        <Pressable disabled={busy} style={styles.deleteButton} onPress={() => confirmReview(request, "rejected")}><Text style={styles.deleteText}>Từ chối</Text></Pressable>
+                      </View>
+                    )}
+                  </View>
+                ))}
+          </View>
+          {!!intakeError && <Text style={styles.error}>{intakeError}</Text>}
           <View style={styles.tabs}>
             <Pressable onPress={() => setTab("active")} style={[styles.tab, tab === "active" && styles.tabActive]}>
               <Text style={[styles.tabText, tab === "active" && styles.tabTextActive]}>Đang sử dụng ({activeCount})</Text>
@@ -239,14 +384,22 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
               {!!item.directionsText && <Text style={styles.detail}>Hướng dẫn: {item.directionsText}</Text>}
               {!!item.startDate && <Text style={styles.detail}>Bắt đầu: {item.startDate}{item.endDate ? "  •  Kết thúc: " + item.endDate : ""}</Text>}
               {!!item.notes && <Text style={styles.detail}>Ghi chú: {item.notes}</Text>}
+              {(() => {
+                const latestLog = intakeLogs?.find(log => log.medicationId === item.id);
+                return latestLog ? <Text style={styles.muted}>
+                  Ghi nhận gần nhất: {latestLog.takenAt?.toDate().toLocaleString("vi-VN") ?? "Đang cập nhật"}
+                  {" · "}{latestLog.recordedByRole === "caregiver" ? "Người chăm sóc" : "Người cao tuổi"}
+                </Text> : null;
+              })()}
               <View style={styles.actions}>
-                <Pressable style={styles.secondaryButton} onPress={() => openEdit(item)}><Text style={styles.secondaryText}>Chỉnh sửa</Text></Pressable>
-                {item.status === "active" && <Pressable style={styles.secondaryButton} onPress={() => confirmStop(item)}><Text style={styles.secondaryText}>Ngừng dùng</Text></Pressable>}
-                <Pressable style={styles.deleteButton} onPress={() => confirmDelete(item)}><Text style={styles.deleteText}>Xóa</Text></Pressable>
+                {item.status === "active" && <Pressable disabled={busy} style={styles.secondaryButton} onPress={() => recordIntake(item)}><Text style={styles.secondaryText}>Đã uống thuốc</Text></Pressable>}
+                <Pressable style={styles.secondaryButton} onPress={() => openEdit(item)}><Text style={styles.secondaryText}>{family ? "Đề xuất chỉnh sửa" : "Chỉnh sửa"}</Text></Pressable>
+                {item.status === "active" && <Pressable style={styles.secondaryButton} onPress={() => confirmStop(item)}><Text style={styles.secondaryText}>{family ? "Đề xuất ngừng" : "Ngừng dùng"}</Text></Pressable>}
+                <Pressable style={styles.deleteButton} onPress={() => confirmDelete(item)}><Text style={styles.deleteText}>{family ? "Đề xuất xóa" : "Xóa"}</Text></Pressable>
               </View>
             </View>
           ))}
-          <Pressable style={styles.primaryButton} onPress={openCreate}><Text style={styles.primaryText}>＋  Thêm thuốc</Text></Pressable>
+          <Pressable style={styles.primaryButton} onPress={openCreate}><Text style={styles.primaryText}>{family ? "＋  Đề xuất thêm thuốc" : "＋  Thêm thuốc"}</Text></Pressable>
         </>
       )}
 
@@ -254,7 +407,9 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
         <KeyboardAvoidingView style={styles.modal} behavior={Platform.OS === "ios" ? "padding" : undefined}>
           <View style={styles.modalHeader}>
             <Pressable disabled={busy} onPress={() => setEditor(false)}><Text style={styles.modalCancel}>Đóng</Text></Pressable>
-            <Text style={styles.modalTitle}>{editing ? "Chỉnh sửa thuốc" : "Thêm thuốc mới"}</Text>
+            <Text style={styles.modalTitle}>{family
+              ? (editing ? "Đề xuất thay đổi thuốc" : "Đề xuất thêm thuốc")
+              : (editing ? "Chỉnh sửa thuốc" : "Thêm thuốc mới")}</Text>
             <Pressable disabled={busy} onPress={() => void submit()}><Text style={styles.modalSave}>{busy ? "Đang lưu..." : "Lưu"}</Text></Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.form} keyboardShouldPersistTaps="handled">
@@ -278,13 +433,33 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
             <CalendarField label="Ngày bắt đầu" value={draft.startDate} expanded={calendar === "startDate"} onToggle={() => { Keyboard.dismiss(); setCalendar(calendar === "startDate" ? null : "startDate"); }} onSelect={value => { patch("startDate", value); setCalendar(null); }} />
             <CalendarField label="Ngày kết thúc (nếu có)" value={draft.endDate} minDate={draft.startDate} expanded={calendar === "endDate"} onToggle={() => { Keyboard.dismiss(); setCalendar(calendar === "endDate" ? null : "endDate"); }} onSelect={value => { patch("endDate", value); setCalendar(null); }} />
             <Field label="Ghi chú" value={draft.notes} onChange={value => patch("notes", value)} placeholder="Ghi chú thêm" multiline />
-            <Text style={styles.disclaimer}>Thông tin liều dùng do người chăm sóc nhập theo đơn hoặc chỉ định chuyên môn. Ứng dụng không tự đề xuất hay thay đổi liều thuốc.</Text>
-            <Pressable disabled={busy} style={[styles.primaryButton, busy && styles.disabled]} onPress={() => void submit()}><Text style={styles.primaryText}>{busy ? "Đang lưu..." : "Lưu thuốc"}</Text></Pressable>
+            {family && <Field label="Lý do/ghi chú đề xuất" value={requestReason} onChange={setRequestReason} placeholder="Nêu lý do cần người cao tuổi xem xét" multiline />}
+            <Text style={styles.disclaimer}>{family
+              ? "Đây chỉ là đề xuất. Danh sách thuốc không thay đổi cho đến khi người cao tuổi duyệt."
+              : "Thông tin thuốc cần căn cứ đơn thuốc hoặc chỉ định chuyên môn. Ứng dụng không tự đề xuất hay thay đổi liều thuốc."}</Text>
+            <Pressable disabled={busy} style={[styles.primaryButton, busy && styles.disabled]} onPress={() => void submit()}><Text style={styles.primaryText}>{busy ? "Đang xử lý..." : family ? "Gửi đề xuất" : "Lưu thuốc"}</Text></Pressable>
           </ScrollView>
         </KeyboardAvoidingView>
       </Modal>
     </View>
   );
+}
+
+function requestTypeLabel(type: MedicationRequestType) {
+  switch (type) {
+    case "create": return "Đề xuất thêm thuốc";
+    case "update": return "Đề xuất chỉnh sửa";
+    case "stop": return "Đề xuất ngừng thuốc";
+    case "delete": return "Đề xuất xóa thuốc";
+  }
+}
+
+function requestStatusLabel(status: MedicationRequestRecord["status"]) {
+  switch (status) {
+    case "pending": return "Chờ người cao tuổi quyết định";
+    case "approved": return "Đã được đồng ý";
+    case "rejected": return "Đã bị từ chối";
+  }
 }
 
 function formatDate(value: string) {
@@ -353,6 +528,9 @@ const styles = StyleSheet.create({
   count: { minWidth: 38, height: 38, borderRadius: 13, backgroundColor: colors.soft, alignItems: "center", justifyContent: "center", paddingHorizontal: 8 },
   countText: { color: colors.primaryDark, fontWeight: "800", fontSize: 16 },
   selectorGroup: { gap: 7 },
+  requestPanel: { gap: 9, padding: 12, borderRadius: 14, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
+  requestHeading: { color: colors.text, fontSize: 16, fontWeight: "800" },
+  requestCard: { gap: 6, padding: 10, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   fieldLabel: { color: colors.text, fontSize: 14, fontWeight: "700", marginBottom: 5 },
   personOption: { minHeight: 46, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center" },
   personSelected: { borderColor: colors.primary, backgroundColor: colors.soft },
