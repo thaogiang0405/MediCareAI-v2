@@ -77,26 +77,13 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
       value => {
         setConnections(value);
         setConnectionError("");
+        setSeniorUid(current => value.some(item => item.seniorUid === current)
+          ? current
+          : value[0]?.seniorUid ?? "");
       },
       error => { setConnections(null); setConnectionError(medicationErrorMessage(error)); },
     );
   }, [family, user.uid, retry]);
-
-  useEffect(() => {
-    if (!family || !connections) return;
-    if (!connections.some(item => item.seniorUid === seniorUid)) {
-      setSeniorUid(connections[0]?.seniorUid ?? "");
-      setTab("active");
-      setCaregiverView("medications");
-      setActivityTab("notifications");
-      setExpandedMedicationId(null);
-      setMoreMedicationActionsId(null);
-      setExpandedRequestId(null);
-      setShowAllNotifications(false);
-      setShowAllRequests(false);
-      setShowAllHistory(false);
-    }
-  }, [family, connections, seniorUid]);
 
   const selectedConnection = family && !connectionError
     ? connections?.find(item => item.seniorUid === seniorUid)
