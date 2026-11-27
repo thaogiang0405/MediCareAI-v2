@@ -360,6 +360,130 @@ service cloud.firestore {
         ]);
     }
 
+    function hasMedicationNotificationRequestAfter(uid, data, expectedStatus) {
+      let requestAfter = getAfter(/databases/$(database)/documents/elderlyProfiles/$(uid)/medicationRequests/$(data.requestId)).data;
+      return requestAfter is map
+        && requestAfter.ownerUid == uid
+        && requestAfter.requestedByUid == (
+          data.eventType == 'proposal_submitted' ? request.auth.uid : requestAfter.requestedByUid
+        )
+        && requestAfter.status == expectedStatus
+        && requestAfter.medicationId == data.medicationId
+        && requestAfter.medicationName == data.medicationName
+        && requestAfter.requestType == data.requestType
+        && (
+          (expectedStatus == 'pending' && requestAfter.createdAt == request.time)
+          || (
+            expectedStatus in ['approved', 'rejected']
+            && requestAfter.reviewedByUid == request.auth.uid
+            && requestAfter.reviewedAt == request.time
+            && requestAfter.updatedAt == request.time
+            && data.decision == expectedStatus
+          )
+        );
+    }
+
+    function hasMedicationNotificationStatusAfter(uid, data, expectedStatus) {
+      let medicationAfter = getAfter(/databases/$(database)/documents/elderlyProfiles/$(uid)/medications/$(data.medicationId)).data;
+      let medicationBefore = get(/databases/$(database)/documents/elderlyProfiles/$(uid)/medications/$(data.medicationId)).data;
+      return medicationAfter is map
+        && medicationAfter.ownerUid == uid
+        && medicationAfter.status == expectedStatus
+        && medicationAfter.updatedByUid == request.auth.uid
+        && medicationAfter.updatedAt == request.time
+        && medicationAfter.revision == medicationBefore.revision + 1
+        && (
+          (expectedStatus == 'inactive' && medicationBefore.status == 'active')
+          || (expectedStatus == 'active' && medicationBefore.status == 'inactive')
+        );
+    }
+
+    function hasValidMedicationNotificationCreate(uid) {
+      let data = request.resource.data;
+      return hasValidElderlyProfile(uid) || hasActiveMedicationConnection(uid)
+        ? data.keys().hasAll([
+            'ownerUid', 'eventType', 'medicationId', 'medicationName',
+            'actorUid', 'actorName', 'actorRole', 'requestId',
+            'requestType', 'decision', 'createdAt'
+          ])
+          && data.keys().hasOnly([
+            'ownerUid', 'eventType', 'medicationId', 'medicationName',
+            'actorUid', 'actorName', 'actorRole', 'requestId',
+            'requestType', 'decision', 'createdAt'
+          ])
+          && data.ownerUid == uid
+          && data.actorUid == request.auth.uid
+          && data.actorName is string
+          && data.actorName.size() >= 1
+          && data.actorName.size() <= 80
+          && data.medicationName is string
+          && data.medicationName.size() >= 1
+          && data.medicationName.size() <= 120
+          && data.createdAt == request.time
+          && data.eventType is string
+          && data.eventType in [
+            'proposal_submitted', 'proposal_reviewed',
+            'medication_stopped', 'medication_reactivated'
+          ]
+          && (
+            data.medicationId == null
+            || (data.medicationId is string && data.medicationId.size() >= 1 && data.medicationId.size() <= 150)
+          )
+          && (
+            data.requestId == null
+            || (data.requestId is string && data.requestId.size() >= 1 && data.requestId.size() <= 150)
+          )
+          && (
+            data.requestType == null
+            || (data.requestType is string && data.requestType in ['create', 'update', 'stop', 'delete'])
+          )
+          && (
+            data.decision == null
+            || (data.decision is string && data.decision in ['approved', 'rejected'])
+          )
+          && (
+            (
+              data.eventType == 'proposal_submitted'
+              && hasActiveMedicationConnection(uid)
+              && data.actorRole == 'caregiver'
+              && data.requestId is string
+              && data.requestType in ['create', 'update', 'stop', 'delete']
+              && data.decision == null
+              && hasMedicationNotificationRequestAfter(uid, data, 'pending')
+            )
+            || (
+              data.eventType == 'proposal_reviewed'
+              && hasValidElderlyProfile(uid)
+              && data.actorRole == 'elderly'
+              && data.requestId is string
+              && data.requestType in ['create', 'update', 'stop', 'delete']
+              && data.decision in ['approved', 'rejected']
+              && hasMedicationNotificationRequestAfter(uid, data, data.decision)
+            )
+            || (
+              data.eventType == 'medication_stopped'
+              && hasValidElderlyProfile(uid)
+              && data.actorRole == 'elderly'
+              && data.medicationId is string
+              && data.requestId == null
+              && data.requestType == null
+              && data.decision == null
+              && hasMedicationNotificationStatusAfter(uid, data, 'inactive')
+            )
+            || (
+              data.eventType == 'medication_reactivated'
+              && hasValidElderlyProfile(uid)
+              && data.actorRole == 'elderly'
+              && data.medicationId is string
+              && data.requestId == null
+              && data.requestType == null
+              && data.decision == null
+              && hasMedicationNotificationStatusAfter(uid, data, 'active')
+            )
+          )
+        : false;
+    }
+
     function hasValidMedicationIntakeLog(uid) {
       let data = request.resource.data;
       let medication = get(/databases/$(database)/documents/elderlyProfiles/$(uid)/medications/$(data.medicationId)).data;
@@ -932,6 +1056,14 @@ service cloud.firestore {
       allow create: if hasValidMedicationRequestCreate(uid);
       allow update: if isValidMedicationRequestReview(uid);
       allow delete: if false;
+    }
+
+    match /elderlyProfiles/{uid}/medicationNotifications/{notificationId} {
+      // A shared in-app event stream for the owner and every currently connected caregiver.
+      // New events must be committed atomically with their proposal or medication status change.
+      allow get, list: if hasValidElderlyProfile(uid) || hasActiveMedicationConnection(uid);
+      allow create: if hasValidMedicationNotificationCreate(uid);
+      allow update, delete: if false;
     }
 
     match /elderlyProfiles/{uid}/medicationIntakeLogs/{logId} {
