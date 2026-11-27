@@ -234,7 +234,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
         </>
       )}
 
-      <Modal visible={editor} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => !busy && setEditor(false)}>
+      <Modal visible={editor} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { if (!busy) setEditor(false); }}>
         <View style={styles.modal}>
           <View style={styles.modalHeader}>
             <Pressable disabled={busy} onPress={() => setEditor(false)}><Text style={styles.modalCancel}>Đóng</Text></Pressable>
