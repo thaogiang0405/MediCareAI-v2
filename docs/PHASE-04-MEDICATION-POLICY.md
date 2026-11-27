@@ -62,8 +62,9 @@ Thông báo trong ứng dụng được lưu chung theo hồ sơ người cao tu
 
 Các sự kiện Phase 04:
 - `proposal_submitted`: người chăm sóc gửi đề xuất; thông báo đến người cao tuổi và mọi người chăm sóc đang kết nối.
-- `proposal_reviewed`: người cao tuổi duyệt hoặc từ chối; thông báo đến các người chăm sóc.
-- `medication_stopped`: người cao tuổi ngừng thuốc; thông báo đồng thời là mốc lịch sử, có người thực hiện và thời điểm máy chủ.
+- `proposal_reviewed`: mỗi khi người cao tuổi duyệt hoặc từ chối bất kỳ đề xuất nào (thêm, sửa, ngừng, xóa), hệ thống tạo một thông báo riêng trong cùng transaction với quyết định. Tất cả người chăm sóc đang kết nối đều đọc được sự kiện này.
+- `medication_stopped`: nếu người cao tuổi duyệt đề xuất ngừng thuốc, hệ thống tạo thêm một sự kiện trạng thái ngừng thuốc bên cạnh `proposal_reviewed`. Sự kiện này là mốc lịch sử, có người thực hiện và thời điểm máy chủ.
+
 - `medication_reactivated`: người cao tuổi sử dụng lại thuốc; ghi lịch sử và thông báo cho mọi người chăm sóc.
 
 Việc ghi request + thông báo, duyệt request + thông báo, hoặc đổi trạng thái thuốc + thông báo được thực hiện trong cùng một batch/transaction. Rules dùng `getAfter()` để xác nhận sự kiện đi kèm dữ liệu nghiệp vụ tương ứng, tránh tạo thông báo giả bằng client.
