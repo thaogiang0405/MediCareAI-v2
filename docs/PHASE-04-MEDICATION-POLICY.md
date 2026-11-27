@@ -1,7 +1,7 @@
 # Chính sách nghiệp vụ quản lý thuốc — Phase 04
 
 Trạng thái: Đã được chủ dự án phê duyệt ngày 27/11/2026.  
-Phạm vi: MediCare AI V2, nhánh \`feature/phase-04-medication-management\`.
+Phạm vi: MediCare AI V2, nhánh `feature/phase-04-medication-management`.
 
 ## 1. Nguyên tắc
 
@@ -32,17 +32,17 @@ Người cao tuổi không cần có kết nối gia đình để tự quản l�
 
 Người chăm sóc được gửi bốn loại đề xuất:
 
-- \`create\`: đề xuất thêm thuốc.
-- \`update\`: đề xuất thay đổi thông tin thuốc.
-- \`stop\`: đề xuất ngừng sử dụng thuốc.
-- \`delete\`: đề xuất xóa mềm thuốc khỏi danh sách.
+- `create`: đề xuất thêm thuốc.
+- `update`: đề xuất thay đổi thông tin thuốc.
+- `stop`: đề xuất ngừng sử dụng thuốc.
+- `delete`: đề xuất xóa mềm thuốc khỏi danh sách.
 
 Mỗi đề xuất lưu chủ hồ sơ, thuốc liên quan (nếu có), tên thuốc tại thời điểm gửi, loại đề xuất, dữ liệu đề xuất, người gửi, lý do, thời gian gửi và trạng thái.
 
 Trạng thái:
-- \`pending\`: chờ người cao tuổi quyết định.
-- \`approved\`: người cao tuổi đồng ý; ứng dụng áp dụng thay đổi trong cùng một giao dịch Firestore.
-- \`rejected\`: người cao tuổi từ chối; danh sách thuốc chính thức không thay đổi.
+- `pending`: chờ người cao tuổi quyết định.
+- `approved`: người cao tuổi đồng ý; ứng dụng áp dụng thay đổi trong cùng một giao dịch Firestore.
+- `rejected`: người cao tuổi từ chối; danh sách thuốc chính thức không thay đổi.
 
 Người chăm sóc chỉ đọc được đề xuất do chính họ gửi khi kết nối còn hiệu lực. Người cao tuổi sở hữu hồ sơ đọc và xử lý các đề xuất thuộc hồ sơ của mình. Không cho phép sửa hoặc xóa đề xuất sau khi gửi; quyết định của người cao tuổi là thao tác cập nhật duy nhất trên đề xuất.
 
@@ -52,13 +52,13 @@ Việc phê duyệt trong ứng dụng chỉ xác nhận người cao tuổi đ�
 
 Nhật ký được lưu riêng tại:
 
-\`elderlyProfiles/{seniorUid}/medicationIntakeLogs/{logId}\`
+`elderlyProfiles/{seniorUid}/medicationIntakeLogs/{logId}`
 
 Mỗi bản ghi gồm:
-- \`ownerUid\`, \`medicationId\`, \`medicationName\` (ảnh chụp tên thuốc tại thời điểm ghi nhận).
-- \`recordedByUid\` và \`recordedByRole\` (\`elderly\` hoặc \`caregiver\`).
-- \`takenAt\`, \`createdAt\` do máy chủ Firestore đóng dấu.
-- \`note\` tùy chọn.
+- `ownerUid`, `medicationId`, `medicationName` (ảnh chụp tên thuốc tại thời điểm ghi nhận).
+- `recordedByUid` và `recordedByRole` (`elderly` hoặc `caregiver`).
+- `takenAt`, `createdAt` do máy chủ Firestore đóng dấu.
+- `note` tùy chọn.
 
 Chỉ được ghi nhận cho thuốc đang hoạt động và đúng chủ hồ sơ. Nhật ký là append-only: không cho cập nhật hoặc xóa. Bản ghi thể hiện người dùng đã khai báo đã uống; không phải bằng chứng y tế độc lập rằng thuốc chắc chắn đã được uống.
 
@@ -66,7 +66,7 @@ Chỉ được ghi nhận cho thuốc đang hoạt động và đúng chủ hồ
 
 Người đại diện là một loại thẩm quyền riêng, không đồng nhất với người chăm sóc và không được suy ra từ việc hai tài khoản đã kết nối.
 
-Phase 04 không cấp quyền đại diện và không cho phép tài khoản gia đình tự khai trạng thái “đã xác minh”. Đường dẫn dữ liệu dự kiến \`legalRepresentativeAuthorizations\` đang bị từ chối mặc định.
+Phase 04 không cấp quyền đại diện và không cho phép tài khoản gia đình tự khai trạng thái “đã xác minh”. Đường dẫn dữ liệu dự kiến `legalRepresentativeAuthorizations` đang bị từ chối mặc định.
 
 Trước khi triển khai quyền đại diện ở giai đoạn sau, phải có tối thiểu:
 1. Tiêu chí và loại giấy tờ/căn cứ ủy quyền được chấp nhận.
@@ -79,10 +79,10 @@ Cho đến khi các điều kiện này được thiết kế, phê duyệt và 
 
 ## 6. Mô hình dữ liệu và Security Rules
 
-- Thuốc chính thức giữ nguyên đường dẫn hiện có: \`elderlyProfiles/{seniorUid}/medications/{medicationId}\`.
-- Đề xuất: \`elderlyProfiles/{seniorUid}/medicationRequests/{requestId}\`.
-- Nhật ký uống thuốc: \`elderlyProfiles/{seniorUid}/medicationIntakeLogs/{logId}\`.
-- Ủy quyền đại diện: \`elderlyProfiles/{seniorUid}/legalRepresentativeAuthorizations/{authorizationId}\`, hiện mặc định từ chối.
+- Thuốc chính thức giữ nguyên đường dẫn hiện có: `elderlyProfiles/{seniorUid}/medications/{medicationId}`.
+- Đề xuất: `elderlyProfiles/{seniorUid}/medicationRequests/{requestId}`.
+- Nhật ký uống thuốc: `elderlyProfiles/{seniorUid}/medicationIntakeLogs/{logId}`.
+- Ủy quyền đại diện: `elderlyProfiles/{seniorUid}/legalRepresentativeAuthorizations/{authorizationId}`, hiện mặc định từ chối.
 
 Firestore Rules chỉ cho chủ hồ sơ tạo/cập nhật thuốc chính thức. Người chăm sóc đang kết nối được đọc thuốc, tạo đề xuất của chính mình và tạo nhật ký uống thuốc; không được ghi vào collection thuốc. Nhật ký không cho sửa/xóa. Khi ngắt kết nối, quyền người chăm sóc bị thu hồi.
 
