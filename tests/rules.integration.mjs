@@ -652,6 +652,8 @@ test("Phase 04: connected caregiver and senior can append immutable medication i
   )));
   await assertFails(updateDoc(caregiverLogRef, { note: "Sửa lịch sử." }));
   await assertFails(deleteDoc(caregiverLogRef));
+  await assertFails(updateDoc(seniorLogRef, { note: "Chủ hồ sơ sửa lịch sử." }));
+  await assertFails(deleteDoc(seniorLogRef));
   await assertFails(setDoc(
     doc(db("f2"), "elderlyProfiles", "s1", "medicationIntakeLogs", "stranger-log"),
     medicationIntakeLogData("s1", "med-1", "Paracetamol", "f2", "caregiver"),
