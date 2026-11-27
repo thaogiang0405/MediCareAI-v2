@@ -354,6 +354,22 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
                 ))}
           </View>
           {!!intakeError && <Text style={styles.error}>{intakeError}</Text>}
+          <View style={styles.requestPanel}>
+            <Text style={styles.requestHeading}>Lịch sử ghi nhận uống thuốc</Text>
+            {intakeLogs === null
+              ? <View style={styles.loading}><ActivityIndicator color={colors.primary} /><Text style={styles.muted}>Đang tải lịch sử...</Text></View>
+              : intakeLogs.length === 0
+                ? <Text style={styles.muted}>Chưa có lần uống thuốc nào được ghi nhận.</Text>
+                : intakeLogs.slice(0, 10).map(log => (
+                  <View key={log.id} style={styles.historyRow}>
+                    <View style={styles.flex}>
+                      <Text style={styles.detail}>{log.medicationName}</Text>
+                      <Text style={styles.muted}>{log.takenAt?.toDate().toLocaleString("vi-VN") ?? "Đang cập nhật"}</Text>
+                    </View>
+                    <Text style={styles.historyActor}>{log.recordedByRole === "caregiver" ? "Người chăm sóc" : "Người cao tuổi"}</Text>
+                  </View>
+                ))}
+          </View>
           <View style={styles.tabs}>
             <Pressable onPress={() => setTab("active")} style={[styles.tab, tab === "active" && styles.tabActive]}>
               <Text style={[styles.tabText, tab === "active" && styles.tabTextActive]}>Đang sử dụng ({activeCount})</Text>
@@ -525,6 +541,8 @@ const styles = StyleSheet.create({
   requestPanel: { gap: 9, padding: 12, borderRadius: 14, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.border },
   requestHeading: { color: colors.text, fontSize: 16, fontWeight: "800" },
   requestCard: { gap: 6, padding: 10, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  historyRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: colors.border },
+  historyActor: { color: colors.primaryDark, fontSize: 11, fontWeight: "700" },
   fieldLabel: { color: colors.text, fontSize: 14, fontWeight: "700", marginBottom: 5 },
   personOption: { minHeight: 46, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 12, flexDirection: "row", alignItems: "center" },
   personSelected: { borderColor: colors.primary, backgroundColor: colors.soft },
