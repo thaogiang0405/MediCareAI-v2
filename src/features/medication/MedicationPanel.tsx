@@ -86,6 +86,15 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
     if (!family || !connections) return;
     if (!connections.some(item => item.seniorUid === seniorUid)) {
       setSeniorUid(connections[0]?.seniorUid ?? "");
+      setTab("active");
+      setCaregiverView("medications");
+      setActivityTab("notifications");
+      setExpandedMedicationId(null);
+      setMoreMedicationActionsId(null);
+      setExpandedRequestId(null);
+      setShowAllNotifications(false);
+      setShowAllRequests(false);
+      setShowAllHistory(false);
     }
   }, [family, connections, seniorUid]);
 
@@ -183,6 +192,11 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
     setMoreMedicationActionsId(null);
     setCaregiverView("medications");
     setActivityTab("notifications");
+    setTab("active");
+    setExpandedRequestId(null);
+    setShowAllNotifications(false);
+    setShowAllRequests(false);
+    setShowAllHistory(false);
     setEditor(false);
     setCalendar(null);
   }
