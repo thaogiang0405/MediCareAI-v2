@@ -9,8 +9,9 @@ import { colors } from "@/theme";
 import { watchConnections, type ConnectionRecord } from "@/features/connection/connection";
 import {
   createMedicationRequest, deleteMedication, medicationErrorMessage, recordMedicationIntake,
-  reviewMedicationRequest, saveMedication, stopMedication, watchMedicationIntakeLogs,
-  watchMedicationRequests, watchMedications, type MedicationIntakeLogRecord,
+  reactivateMedication, reviewMedicationRequest, saveMedication, stopMedication,
+  watchMedicationIntakeLogs, watchMedicationNotifications, watchMedicationRequests,
+  watchMedications, type MedicationIntakeLogRecord, type MedicationNotificationRecord,
   type MedicationRecord, type MedicationRequestRecord, type MedicationRequestType,
 } from "./medication";
 import {
@@ -54,8 +55,10 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
   const [requestReason, setRequestReason] = useState("");
   const [requestSnapshot, setRequestSnapshot] = useState<{ scope: string; items: MedicationRequestRecord[] } | null>(null);
   const [intakeSnapshot, setIntakeSnapshot] = useState<{ scope: string; items: MedicationIntakeLogRecord[] } | null>(null);
+  const [notificationSnapshot, setNotificationSnapshot] = useState<{ scope: string; items: MedicationNotificationRecord[] } | null>(null);
   const [requestError, setRequestError] = useState("");
   const [intakeError, setIntakeError] = useState("");
+  const [notificationError, setNotificationError] = useState("");
 
   useEffect(() => {
     if (!family) return;
@@ -123,8 +126,24 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
     );
   }, [selectedSeniorUid, scope]);
 
+  useEffect(() => {
+    if (!selectedSeniorUid) return;
+    return watchMedicationNotifications(
+      selectedSeniorUid,
+      value => {
+        setNotificationSnapshot({ scope, items: value });
+        setNotificationError("");
+      },
+      error => {
+        setNotificationSnapshot(null);
+        setNotificationError(medicationErrorMessage(error));
+      },
+    );
+  }, [selectedSeniorUid, scope]);
+
   const requests = scope && requestSnapshot?.scope === scope ? requestSnapshot.items : null;
   const intakeLogs = scope && intakeSnapshot?.scope === scope ? intakeSnapshot.items : null;
+  const notifications = scope && notificationSnapshot?.scope === scope ? notificationSnapshot.items : null;
 
   const medications = scope && medicationSnapshot?.scope === scope
     ? medicationSnapshot.medications
@@ -230,6 +249,23 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
         ),
       },
     ]);
+  }
+
+  function confirmReactivate(item: MedicationRecord, closeEditor = false) {
+    Alert.alert(
+      "Sử dụng lại thuốc?",
+      "Thuốc sẽ chuyển từ mục Đã ngừng sang Đang sử dụng. Ứng dụng sẽ ghi lại thời điểm và thông báo cho những người chăm sóc đang kết nối.",
+      [
+        { text: "Để sau", style: "cancel" },
+        {
+          text: "Sử dụng lại",
+          onPress: () => void perform(async () => {
+            await reactivateMedication(user, profile, selectedSeniorUid, item);
+            if (closeEditor) setEditor(false);
+          }, "Đã khôi phục thuốc và gửi thông báo cho người chăm sóc."),
+        },
+      ],
+    );
   }
 
   function confirmDelete(item: MedicationRecord) {
@@ -340,6 +376,23 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
       {isReady && (
         <>
           <View style={styles.requestPanel}>
+            <Text style={styles.requestHeading}>Thông báo thuốc</Text>
+            <Text style={styles.muted}>Thông báo cập nhật theo thời gian thực cho người cao tuổi và tất cả người chăm sóc đang kết nối.</Text>
+            {notificationError ? <Text style={styles.error}>{notificationError}</Text> : notifications === null
+              ? <View style={styles.loading}><ActivityIndicator color={colors.primary} /><Text style={styles.muted}>Đang tải thông báo...</Text></View>
+              : notifications.length === 0
+                ? <Text style={styles.muted}>Chưa có thông báo về thuốc.</Text>
+                : notifications.slice(0, 10).map(item => (
+                  <View key={item.id} style={styles.notificationCard}>
+                    <Text style={styles.detail}>{notificationMessage(item)}</Text>
+                    <Text style={styles.muted}>
+                      {item.createdAt?.toDate().toLocaleString("vi-VN") ?? "Đang cập nhật"}
+                      {" · "}{item.actorRole === "caregiver" ? "Người chăm sóc" : "Người cao tuổi"}
+                    </Text>
+                  </View>
+                ))}
+          </View>
+          <View style={styles.requestPanel}>
             <Text style={styles.requestHeading}>{family ? "Đề xuất của bạn" : "Đề xuất từ người chăm sóc"}</Text>
             {requestError ? <Text style={styles.error}>{requestError}</Text> : requests === null
               ? <View style={styles.loading}><ActivityIndicator color={colors.primary} /><Text style={styles.muted}>Đang tải đề xuất...</Text></View>
@@ -423,6 +476,18 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
               {!!item.startDate && <Text style={styles.detail}>Bắt đầu: {item.startDate}{item.endDate ? "  •  Kết thúc: " + item.endDate : ""}</Text>}
               {!!item.notes && <Text style={styles.detail}>Ghi chú: {item.notes}</Text>}
               {(() => {
+                const latestStatusEvent = notifications?.find(event =>
+                  event.medicationId === item.id
+                  && (event.eventType === "medication_stopped" || event.eventType === "medication_reactivated")
+                );
+                if (!latestStatusEvent) return null;
+                return <Text style={styles.muted}>
+                  {latestStatusEvent.eventType === "medication_stopped" ? "Đã ngừng" : "Đã sử dụng lại"} ngày
+                  {" "}{latestStatusEvent.createdAt?.toDate().toLocaleString("vi-VN") ?? "đang cập nhật"}
+                  {" · "}{latestStatusEvent.actorName}
+                </Text>;
+              })()}
+              {(() => {
                 const latestLog = intakeLogs?.find(log => log.medicationId === item.id);
                 return latestLog ? <Text style={styles.muted}>
                   Ghi nhận gần nhất: {latestLog.takenAt?.toDate().toLocaleString("vi-VN") ?? "Đang cập nhật"}
@@ -433,6 +498,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
                 {item.status === "active" && <Pressable disabled={busy} style={styles.secondaryButton} onPress={() => recordIntake(item)}><Text style={styles.secondaryText}>Đã uống thuốc</Text></Pressable>}
                 <Pressable style={styles.secondaryButton} onPress={() => openEdit(item)}><Text style={styles.secondaryText}>{family ? "Đề xuất chỉnh sửa" : "Chỉnh sửa"}</Text></Pressable>
                 {item.status === "active" && <Pressable style={styles.secondaryButton} onPress={() => confirmStop(item)}><Text style={styles.secondaryText}>{family ? "Đề xuất ngừng" : "Ngừng dùng"}</Text></Pressable>}
+                {!family && item.status === "inactive" && <Pressable disabled={busy} style={styles.primaryButton} onPress={() => confirmReactivate(item)}><Text style={styles.primaryText}>Sử dụng lại</Text></Pressable>}
                 <Pressable style={styles.deleteButton} onPress={() => confirmDelete(item)}><Text style={styles.deleteText}>{family ? "Đề xuất xóa" : "Xóa"}</Text></Pressable>
               </View>
             </View>
@@ -472,6 +538,11 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
             <CalendarField label="Ngày kết thúc (nếu có)" value={draft.endDate} minDate={draft.startDate} expanded={calendar === "endDate"} onToggle={() => { Keyboard.dismiss(); setCalendar(calendar === "endDate" ? null : "endDate"); }} onSelect={value => { patch("endDate", value); setCalendar(null); }} />
             <Field label="Ghi chú" value={draft.notes} onChange={value => patch("notes", value)} placeholder="Ghi chú thêm" multiline />
             {family && <Field label="Lý do/ghi chú đề xuất" value={requestReason} onChange={setRequestReason} placeholder="Nêu lý do cần người cao tuổi xem xét" multiline />}
+            {!family && editing?.status === "inactive" && (
+              <Pressable disabled={busy} style={styles.primaryButton} onPress={() => confirmReactivate(editing, true)}>
+                <Text style={styles.primaryText}>Sử dụng lại thuốc này</Text>
+              </Pressable>
+            )}
             <Text style={styles.disclaimer}>{family
               ? "Đây chỉ là đề xuất. Danh sách thuốc không thay đổi cho đến khi người cao tuổi duyệt."
               : "Thông tin thuốc cần căn cứ đơn thuốc hoặc chỉ định chuyên môn. Ứng dụng không tự đề xuất hay thay đổi liều thuốc."}</Text>
@@ -481,6 +552,30 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
       </Modal>
     </View>
   );
+}
+
+function requestAction(type: MedicationRequestType | null) {
+  switch (type) {
+    case "create": return "thêm";
+    case "update": return "chỉnh sửa";
+    case "stop": return "ngừng";
+    case "delete": return "xóa";
+    default: return "thay đổi";
+  }
+}
+
+function notificationMessage(item: MedicationNotificationRecord) {
+  switch (item.eventType) {
+    case "proposal_submitted":
+      return item.actorName + " đã đề xuất " + requestAction(item.requestType) + " thuốc " + item.medicationName + ".";
+    case "proposal_reviewed":
+      return "Người cao tuổi đã " + (item.decision === "approved" ? "duyệt" : "từ chối")
+        + " đề xuất " + requestAction(item.requestType) + " thuốc " + item.medicationName + ".";
+    case "medication_stopped":
+      return item.actorName + " đã ngừng sử dụng thuốc " + item.medicationName + ".";
+    case "medication_reactivated":
+      return item.actorName + " đã sử dụng lại thuốc " + item.medicationName + ".";
+  }
 }
 
 function requestTypeLabel(type: MedicationRequestType) {
@@ -570,6 +665,7 @@ const styles = StyleSheet.create({
   requestHeading: { color: colors.text, fontSize: 16, fontWeight: "800" },
   requestCard: { gap: 6, padding: 10, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   requestDetails: { gap: 4, padding: 9, borderRadius: 10, backgroundColor: colors.background },
+  notificationCard: { gap: 5, padding: 10, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
   historyRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: colors.border },
   historyActor: { color: colors.primaryDark, fontSize: 11, fontWeight: "700" },
   fieldLabel: { color: colors.text, fontSize: 14, fontWeight: "700", marginBottom: 5 },
