@@ -292,7 +292,11 @@ service cloud.firestore {
       return medication is map
         && medication.ownerUid == uid
         && medication.status in ['active', 'inactive']
-        && (data.requestType != 'stop' || medication.status == 'active');
+        && (data.requestType != 'stop' || medication.status == 'active')
+        && (
+          (data.requestType == 'update' && data.medicationName == data.proposedData.name)
+          || (data.requestType in ['stop', 'delete'] && data.medicationName == medication.name)
+        );
     }
 
     function hasValidMedicationRequestCreate(uid) {
@@ -327,6 +331,7 @@ service cloud.firestore {
             data.requestType == 'create'
             && data.medicationId == null
             && hasValidMedicationProposal(data.proposedData)
+            && data.medicationName == data.proposedData.name
           )
           || (
             data.requestType == 'update'
