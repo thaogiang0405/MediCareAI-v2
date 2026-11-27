@@ -938,7 +938,6 @@ service cloud.firestore {
           && resource.data.requestedByUid == request.auth.uid);
       allow list: if (hasValidElderlyProfile(uid) && resource.data.ownerUid == uid)
         || (hasActiveMedicationConnection(uid)
-          && resource.data.ownerUid == uid
           && resource.data.requestedByUid == request.auth.uid);
       allow create: if hasValidMedicationRequestCreate(uid);
       allow update: if isValidMedicationRequestReview(uid);
