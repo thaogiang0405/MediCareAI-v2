@@ -306,7 +306,7 @@ export function watchMedicationNotifications(
   onValue: (notifications: MedicationNotificationRecord[]) => void,
   onError: (error: Error) => void,
 ): Unsubscribe {
-  const source = query(notificationCollection(seniorUid), orderBy("createdAt", "desc"), limit(30));
+  const source = query(notificationCollection(seniorUid), orderBy("createdAt", "desc"), limit(100));
   return onSnapshot(source, { includeMetadataChanges: true }, snapshot => {
     if (snapshot.metadata.fromCache || snapshot.metadata.hasPendingWrites) return;
     onValue(snapshot.docs.map(item => toNotification(item.id, item.data())));
