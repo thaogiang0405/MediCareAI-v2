@@ -34,6 +34,7 @@ function ConnectionContent({ user, profile }: { user: User; profile: Profile }) 
   const [loadError, setLoadError] = useState("");
   const [retry, setRetry] = useState(0);
   const [expandedConnection, setExpandedConnection] = useState<string | null>(null);
+  const [showAllPeople, setShowAllPeople] = useState(false);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -136,6 +137,231 @@ function ConnectionContent({ user, profile }: { user: User; profile: Profile }) 
     setLoadError("");
     setNotice(null);
     setRetry(value => value + 1);
+  }
+
+  function requestCreateInvite() {
+    const create = () => void perform(
+      "create",
+      () => createConnectionInvite(user, profile),
+      "Đã tạo mã. Hãy gửi mã cho người cao tuổi để xác nhận.",
+    );
+    if (slot?.status === "active") {
+      Alert.alert(
+        "Tạo mã kết nối mới?",
+        active
+          ? "Mã mới sẽ vô hiệu hóa mã hiện tại nếu mã đó chưa được sử dụng. Các kết nối đã xác nhận không bị ảnh hưởng."
+          : "Mã hiện tại đã hết hạn. Tạo mã mới sẽ thay thế mã cũ; các kết nối đã xác nhận không bị ảnh hưởng.",
+        [
+          { text: "Để sau", style: "cancel" },
+          { text: "Tạo mã mới", onPress: create },
+        ],
+      );
+      return;
+    }
+    create();
+  }
+
+  if (family) {
+    return (
+      <View style={styles.caregiverStack}>
+        <View style={styles.caregiverCard}>
+          <View style={styles.caregiverSectionHeader}>
+            <View style={styles.caregiverHeadingCopy}>
+              <Text style={styles.caregiverEyebrow}>GIA ĐÌNH</Text>
+              <Text style={styles.caregiverTitle}>Người thân đang kết nối</Text>
+              <Text style={styles.caregiverDescription}>Quản lý những người cao tuổi bạn đang hỗ trợ.</Text>
+            </View>
+            <View style={styles.caregiverCountBadge}>
+              <Text style={styles.caregiverCount}>{people?.length ?? "—"}</Text>
+              <Text style={styles.caregiverCountCaption}>kết nối</Text>
+            </View>
+          </View>
+
+          {!ready && !loadError && (
+            <View style={styles.loadingRow}>
+              <ActivityIndicator color={colors.primary} />
+              <Text style={styles.mutedText}>Đang tải danh sách kết nối...</Text>
+            </View>
+          )}
+
+          {!!loadError && (
+            <View style={styles.noticeError}>
+              <Text style={styles.noticeIcon}>!</Text>
+              <Text style={styles.noticeText}>{loadError}</Text>
+              <Pressable accessibilityRole="button" style={styles.retryButton} onPress={retryLoading}>
+                <Text style={styles.retryText}>Thử tải lại</Text>
+              </Pressable>
+            </View>
+          )}
+
+          {ready && people.length === 0 && (
+            <View style={styles.caregiverEmpty}>
+              <View style={styles.caregiverEmptyIcon}><Text style={styles.caregiverEmptySymbol}>+</Text></View>
+              <Text style={styles.caregiverEmptyTitle}>Chưa có người thân nào được kết nối</Text>
+              <Text style={styles.mutedText}>Tạo mã ở bên dưới và gửi cho người cao tuổi để bắt đầu kết nối.</Text>
+            </View>
+          )}
+
+          {ready && (showAllPeople ? people : people.slice(0, 3)).map(connection => {
+            const expanded = expandedConnection === connection.id;
+            const name = personName(connection);
+            return (
+              <View key={connection.id} style={styles.caregiverPersonCard}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={"Thông tin kết nối với " + name}
+                  accessibilityHint={expanded ? "Thu gọn thông tin" : "Mở thông tin kết nối"}
+                  accessibilityState={{ expanded }}
+                  style={styles.caregiverPersonMain}
+                  onPress={() => setExpandedConnection(expanded ? null : connection.id)}
+                >
+                  <View style={styles.caregiverAvatar}>
+                    <Text style={styles.caregiverAvatarText}>{name.trim().charAt(0).toUpperCase() || "?"}</Text>
+                  </View>
+                  <View style={styles.caregiverPersonCopy}>
+                    <Text style={styles.caregiverPersonName} numberOfLines={1}>{name}</Text>
+                    <View style={styles.caregiverStatusRow}>
+                      <View style={styles.statusDot} />
+                      <Text style={styles.caregiverConnectedText}>Đã kết nối</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.caregiverChevron}>{expanded ? "−" : "+"}</Text>
+                </Pressable>
+                {expanded && (
+                  <View style={styles.caregiverPersonDetails}>
+                    <Text style={styles.detailText}>
+                      Kết nối từ: {connection.connectedAt?.toDate?.().toLocaleDateString("vi-VN") ?? "Đang cập nhật"}
+                    </Text>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={busy}
+                      style={[styles.caregiverDisconnectButton, busy && styles.disabled]}
+                      onPress={() => askDisconnect(connection)}
+                    >
+                      <Text style={styles.caregiverDisconnectText}>Hủy kết nối</Text>
+                    </Pressable>
+                  </View>
+                )}
+              </View>
+            );
+          })}
+
+          {ready && people.length > 3 && (
+            <Pressable
+              accessibilityRole="button"
+              style={styles.caregiverShowMore}
+              onPress={() => setShowAllPeople(value => !value)}
+            >
+              <Text style={styles.caregiverShowMoreText}>
+                {showAllPeople ? "Thu gọn danh sách" : "Xem tất cả " + people.length + " người thân"}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+
+        <View style={styles.caregiverCard}>
+          <View style={styles.caregiverSectionHeader}>
+            <View style={styles.caregiverHeadingCopy}>
+              <Text style={styles.caregiverEyebrow}>THIẾT LẬP KẾT NỐI</Text>
+              <Text style={styles.caregiverTitle}>Tạo mã kết nối</Text>
+              <Text style={styles.caregiverDescription}>Người cao tuổi nhập mã và tự xác nhận kết nối với bạn.</Text>
+            </View>
+            <View style={styles.caregiverCodeIcon}><Text style={styles.caregiverCodeIconText}>#</Text></View>
+          </View>
+
+          <View style={styles.caregiverSteps}>
+            <Text style={styles.caregiverStepsTitle}>Thực hiện trong 3 bước</Text>
+            <View style={styles.caregiverStepRow}>
+              <Text style={styles.caregiverStepNumber}>1</Text>
+              <Text style={styles.caregiverStepText}>Tạo mã kết nối trên ứng dụng.</Text>
+            </View>
+            <View style={styles.caregiverStepRow}>
+              <Text style={styles.caregiverStepNumber}>2</Text>
+              <Text style={styles.caregiverStepText}>Gửi mã 8 ký tự cho người cao tuổi.</Text>
+            </View>
+            <View style={styles.caregiverStepRow}>
+              <Text style={styles.caregiverStepNumber}>3</Text>
+              <Text style={styles.caregiverStepText}>Người cao tuổi kiểm tra tên bạn và xác nhận.</Text>
+            </View>
+          </View>
+
+          {active && slot && (
+            <View style={styles.caregiverInviteCard}>
+              <View style={styles.caregiverInviteTop}>
+                <View style={styles.caregiverInviteStatus}>
+                  <View style={styles.statusDot} />
+                  <Text style={styles.caregiverInviteStatusText}>Mã đang có hiệu lực</Text>
+                </View>
+                <Text style={styles.caregiverExpiry}>Còn {formatRemaining(remainingMs)}</Text>
+              </View>
+              <Text selectable style={styles.caregiverCode}>{slot.inviteCode}</Text>
+              <Text style={styles.mutedText}>
+                Hết hạn lúc {new Date(expiry + INVITE_TTL).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                disabled={busy}
+                style={[styles.caregiverCopyButton, busy && styles.disabled]}
+                onPress={() => void perform("copy", async () => {
+                  await Clipboard.setStringAsync(slot.inviteCode);
+                }, "Đã sao chép mã kết nối.")}
+              >
+                {busyAction === "copy"
+                  ? <ActivityIndicator color={colors.primaryDark} />
+                  : <Text style={styles.caregiverCopyText}>Sao chép mã</Text>}
+              </Pressable>
+            </View>
+          )}
+
+          {slot?.status === "active" && !active && (
+            <View style={styles.noticeWarning}>
+              <Text style={styles.noticeIcon}>!</Text>
+              <Text style={styles.noticeText}>Mã đã hết hạn. Hãy tạo mã mới để tiếp tục.</Text>
+            </View>
+          )}
+          {slot?.status === "used" && (
+            <View style={styles.noticeSuccess}>
+              <Text style={styles.noticeIcon}>✓</Text>
+              <Text style={styles.noticeText}>Mã đã được sử dụng để xác nhận kết nối.</Text>
+            </View>
+          )}
+          {!slot && ready && (
+            <View style={styles.caregiverNoCode}>
+              <Text style={styles.caregiverNoCodeTitle}>Chưa có mã kết nối</Text>
+              <Text style={styles.mutedText}>Tạo mã mới để người cao tuổi có thể gửi yêu cầu kết nối.</Text>
+            </View>
+          )}
+
+          <Pressable
+            accessibilityRole="button"
+            disabled={busy || !ready}
+            style={[styles.caregiverPrimaryButton, (busy || !ready) && styles.disabled]}
+            onPress={requestCreateInvite}
+          >
+            {busyAction === "create"
+              ? <ActivityIndicator color={colors.white} />
+              : <Text style={styles.caregiverPrimaryText}>{active ? "Tạo mã mới" : "Tạo mã kết nối"}</Text>}
+          </Pressable>
+          <Text style={styles.caregiverHint}>
+            Mã gồm đúng 8 ký tự, có hiệu lực 15 phút và chỉ sử dụng một lần. Tạo mã mới sẽ vô hiệu hóa mã cũ chưa sử dụng; những kết nối đã xác nhận không bị ảnh hưởng.
+          </Text>
+        </View>
+
+        {busyAction === "disconnect" && (
+          <View style={styles.loadingRow}>
+            <ActivityIndicator color={colors.primary} />
+            <Text style={styles.mutedText}>Đang cập nhật kết nối...</Text>
+          </View>
+        )}
+
+        {notice && (
+          <View style={notice.tone === "success" ? styles.noticeSuccess : styles.noticeError}>
+            <Text style={styles.noticeIcon}>{notice.tone === "success" ? "✓" : "!"}</Text>
+            <Text accessibilityLiveRegion="polite" style={styles.noticeText}>{notice.text}</Text>
+          </View>
+        )}
+      </View>
+    );
   }
 
   return (
@@ -407,6 +633,60 @@ function formatRemaining(milliseconds: number) {
 }
 
 const styles = StyleSheet.create({
+  caregiverStack: { gap: 12 },
+  caregiverCard: {
+    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
+    borderRadius: 20, padding: 15, gap: 13,
+  },
+  caregiverSectionHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  caregiverHeadingCopy: { flex: 1, gap: 4 },
+  caregiverEyebrow: { color: colors.primary, fontSize: 10, fontWeight: "900", letterSpacing: 0.8 },
+  caregiverTitle: { color: colors.text, fontSize: 18, lineHeight: 24, fontWeight: "900" },
+  caregiverDescription: { color: colors.muted, fontSize: 13, lineHeight: 19 },
+  caregiverCountBadge: {
+    minWidth: 48, minHeight: 46, borderRadius: 14, backgroundColor: colors.soft,
+    alignItems: "center", justifyContent: "center", paddingHorizontal: 8,
+  },
+  caregiverCount: { color: colors.primaryDark, fontSize: 18, fontWeight: "900" },
+  caregiverCountCaption: { color: colors.muted, fontSize: 9, fontWeight: "700" },
+  caregiverEmpty: { alignItems: "center", backgroundColor: colors.background, borderRadius: 15, padding: 16, gap: 6 },
+  caregiverEmptyIcon: { width: 42, height: 42, borderRadius: 14, backgroundColor: colors.soft, alignItems: "center", justifyContent: "center" },
+  caregiverEmptySymbol: { color: colors.primary, fontSize: 25, fontWeight: "700" },
+  caregiverEmptyTitle: { color: colors.text, fontSize: 14, fontWeight: "800", textAlign: "center" },
+  caregiverPersonCard: { backgroundColor: colors.background, borderRadius: 15, padding: 10, gap: 8 },
+  caregiverPersonMain: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10 },
+  caregiverAvatar: { width: 42, height: 42, borderRadius: 14, backgroundColor: colors.soft, alignItems: "center", justifyContent: "center" },
+  caregiverAvatarText: { color: colors.primaryDark, fontSize: 17, fontWeight: "900" },
+  caregiverPersonCopy: { flex: 1, gap: 4 },
+  caregiverPersonName: { color: colors.text, fontSize: 15, fontWeight: "800" },
+  caregiverStatusRow: { flexDirection: "row", alignItems: "center", gap: 6 },
+  caregiverConnectedText: { color: "#176B3A", fontSize: 12, fontWeight: "700" },
+  caregiverChevron: { color: colors.primaryDark, fontSize: 20, fontWeight: "700", paddingHorizontal: 7 },
+  caregiverPersonDetails: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 9, gap: 8 },
+  caregiverDisconnectButton: { minHeight: 42, alignSelf: "flex-start", justifyContent: "center", paddingHorizontal: 12, borderRadius: 11, borderWidth: 1, borderColor: "#E8C9C6", backgroundColor: colors.surface },
+  caregiverDisconnectText: { color: "#A3342B", fontSize: 12, fontWeight: "700" },
+  caregiverShowMore: { minHeight: 42, alignItems: "center", justifyContent: "center", borderRadius: 11, backgroundColor: colors.background },
+  caregiverShowMoreText: { color: colors.primaryDark, fontSize: 13, fontWeight: "800" },
+  caregiverCodeIcon: { width: 38, height: 38, borderRadius: 13, backgroundColor: colors.soft, alignItems: "center", justifyContent: "center" },
+  caregiverCodeIconText: { color: colors.primaryDark, fontSize: 21, fontWeight: "900" },
+  caregiverSteps: { backgroundColor: colors.background, borderRadius: 15, padding: 12, gap: 9 },
+  caregiverStepsTitle: { color: colors.text, fontSize: 13, fontWeight: "900", marginBottom: 1 },
+  caregiverStepRow: { flexDirection: "row", alignItems: "center", gap: 9 },
+  caregiverStepNumber: { width: 23, height: 23, borderRadius: 8, backgroundColor: colors.soft, color: colors.primaryDark, textAlign: "center", textAlignVertical: "center", fontSize: 12, fontWeight: "900", overflow: "hidden" },
+  caregiverStepText: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 19 },
+  caregiverInviteCard: { backgroundColor: colors.soft, borderRadius: 16, padding: 14, gap: 9 },
+  caregiverInviteTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 },
+  caregiverInviteStatus: { flexDirection: "row", alignItems: "center", gap: 7 },
+  caregiverInviteStatusText: { color: "#176B3A", fontSize: 12, fontWeight: "800" },
+  caregiverExpiry: { color: colors.primaryDark, fontSize: 12, fontWeight: "900" },
+  caregiverCode: { color: colors.text, fontSize: 30, lineHeight: 38, fontWeight: "900", letterSpacing: 4, textAlign: "center" },
+  caregiverCopyButton: { minHeight: 46, alignItems: "center", justifyContent: "center", borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  caregiverCopyText: { color: colors.primaryDark, fontSize: 14, fontWeight: "900" },
+  caregiverNoCode: { backgroundColor: colors.background, borderRadius: 14, padding: 12, gap: 4 },
+  caregiverNoCodeTitle: { color: colors.text, fontSize: 14, fontWeight: "800" },
+  caregiverPrimaryButton: { minHeight: 50, alignItems: "center", justifyContent: "center", borderRadius: 14, backgroundColor: colors.primary, paddingHorizontal: 14 },
+  caregiverPrimaryText: { color: colors.white, fontSize: 15, fontWeight: "900" },
+  caregiverHint: { color: colors.muted, fontSize: 12, lineHeight: 18 },
   stack: { gap: 12 },
   sectionCard: {
     backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
