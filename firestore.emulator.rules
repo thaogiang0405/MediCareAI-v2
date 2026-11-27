@@ -94,64 +94,133 @@ service cloud.firestore {
         ]);
     }
 
+    function hasValidElderlyProfileData(uid) {
+      let profile = get(/databases/$(database)/documents/users/$(uid)).data;
+      return profile is map
+        && profile.uid == uid
+        && profile.primaryRole == 'elderly'
+        && profile.roles is map
+        && profile.roles.elderly == true
+        && profile.roles.caregiver == false
+        && profile.onboardingCompleted == true;
+    }
+
     function hasValidElderlyProfile(uid) {
-      return ownsUser(uid)
-        && exists(/databases/$(database)/documents/users/$(uid))
-        && hasValidUserProfileSchema(get(/databases/$(database)/documents/users/$(uid)).data)
-        && get(/databases/$(database)/documents/users/$(uid)).data.uid == uid
-        && get(/databases/$(database)/documents/users/$(uid)).data.primaryRole == 'elderly'
-        && get(/databases/$(database)/documents/users/$(uid)).data.roles.elderly == true
-        && get(/databases/$(database)/documents/users/$(uid)).data.roles.caregiver == false
-        && get(/databases/$(database)/documents/users/$(uid)).data.onboardingCompleted == true;
+      return ownsUser(uid) && hasValidElderlyProfileData(uid);
     }
 
     function hasExactMedicationFields(data) {
       return data.keys().hasAll([
-          'ownerUid',
-          'name',
-          'strengthText',
-          'directionsText',
-          'status',
-          'createdAt',
-          'updatedAt',
-          'revision'
+          'ownerUid', 'name', 'strengthText', 'dosage', 'dosageUnit',
+          'dosageForm', 'frequency', 'intakeTimes', 'directionsText',
+          'startDate', 'endDate', 'notes', 'status', 'createdByUid',
+          'updatedByUid', 'createdAt', 'updatedAt', 'deletedAt', 'revision'
         ])
         && data.keys().hasOnly([
-          'ownerUid',
-          'name',
-          'strengthText',
-          'directionsText',
-          'status',
-          'createdAt',
-          'updatedAt',
-          'revision'
+          'ownerUid', 'name', 'strengthText', 'dosage', 'dosageUnit',
+          'dosageForm', 'frequency', 'intakeTimes', 'directionsText',
+          'startDate', 'endDate', 'notes', 'status', 'createdByUid',
+          'updatedByUid', 'createdAt', 'updatedAt', 'deletedAt', 'revision'
         ]);
+    }
+
+    function hasValidMedicationTime(value) {
+      return value is string
+        && value.size() == 5
+        && value.matches('^(?:[01][0-9]|2[0-3]):[0-5][0-9]');
+    }
+
+    function hasValidMedicationIntakeTimes(times) {
+      return times is list
+        && times.size() >= 1
+        && times.size() <= 6
+        && times.toSet().size() == times.size()
+        && hasValidMedicationTime(times[0])
+        && (times.size() < 2 || hasValidMedicationTime(times[1]))
+        && (times.size() < 3 || hasValidMedicationTime(times[2]))
+        && (times.size() < 4 || hasValidMedicationTime(times[3]))
+        && (times.size() < 5 || hasValidMedicationTime(times[4]))
+        && (times.size() < 6 || hasValidMedicationTime(times[5]));
+    }
+
+    function hasValidMedicationDate(value) {
+      return value is string
+        && value.size() == 10
+        && value.matches('^20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])');
     }
 
     function hasValidMedicationSchema(data) {
       return hasExactMedicationFields(data)
         && data.ownerUid is string
-        && data.name is string
-        && data.name.size() >= 1
-        && data.name.size() <= 120
-        && data.name.matches('.*\\S.*')
-        && data.strengthText is string
-        && data.strengthText.size() <= 80
-        && data.directionsText is string
-        && data.directionsText.size() <= 500
-        && data.status is string
-        && data.status in ['active', 'inactive']
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.name.matches('.*[^ ].*')
+        && data.strengthText is string && data.strengthText.size() <= 80
+        && data.dosage is string && data.dosage.size() >= 1 && data.dosage.size() <= 40
+        && data.dosageUnit is string && data.dosageUnit.size() >= 1 && data.dosageUnit.size() <= 40
+        && data.dosageForm is string && data.dosageForm in ['tablet', 'capsule', 'syrup', 'solution', 'powder', 'other']
+        && data.frequency is int && data.frequency >= 1 && data.frequency <= 6
+        && hasValidMedicationIntakeTimes(data.intakeTimes)
+        && data.frequency == data.intakeTimes.size()
+        && data.directionsText is string && data.directionsText.size() <= 500
+        && data.startDate is string
+        && (data.startDate == '' || hasValidMedicationDate(data.startDate))
+        && data.endDate is string
+        && (data.endDate == '' || hasValidMedicationDate(data.endDate))
+        && (data.startDate == '' || data.endDate == '' || data.endDate >= data.startDate)
+        && data.notes is string && data.notes.size() <= 500
+        && data.status is string && data.status in ['active', 'inactive', 'deleted']
+        && data.createdByUid is string
+        && data.updatedByUid is string
         && data.createdAt is timestamp
         && data.updatedAt is timestamp
-        && data.revision is int
-        && data.revision >= 1;
+        && (data.deletedAt == null || data.deletedAt is timestamp)
+        && data.revision is int && data.revision >= 1;
+    }
+
+    function hasActiveMedicationConnectionRecord(uid, connectionId) {
+      let connection = get(/databases/$(database)/documents/connections/$(connectionId)).data;
+      return connection is map
+        && connection.status == 'connected'
+        && connection.familyUid == request.auth.uid
+        && connection.seniorUid == uid;
+    }
+
+    function hasActiveMedicationConnectionForPair(uid, pair) {
+      return pair is map
+        && pair.status == 'connected'
+        && pair.connectionId is string
+        && hasActiveMedicationConnectionRecord(uid, pair.connectionId);
+    }
+
+    function hasActiveMedicationConnectionForSignedInUser(uid) {
+      let caregiver = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      let pair = get(/databases/$(database)/documents/connectionPairs/$(request.auth.uid)/seniors/$(uid)).data;
+      // The canonical profile role is immutable after onboarding. Connection
+      // creation already validates the complete profile schema and role flags.
+      return caregiver is map
+        && caregiver.uid == request.auth.uid
+        && caregiver.primaryRole == 'caregiver'
+        && caregiver.onboardingCompleted == true
+        && hasActiveMedicationConnectionForPair(uid, pair);
+    }
+
+    function hasActiveMedicationConnection(uid) {
+      return signedIn() && hasActiveMedicationConnectionForSignedInUser(uid);
+    }
+
+    function canAccessMedicationProfile(uid) {
+      return hasValidElderlyProfile(uid) || hasActiveMedicationConnection(uid);
     }
 
     function isValidMedicationCreate(uid) {
+      // Only the elderly owner can directly change the official medication list.
       return hasValidElderlyProfile(uid)
         && hasValidMedicationSchema(request.resource.data)
         && request.resource.data.ownerUid == uid
         && request.resource.data.status == 'active'
+        && request.resource.data.createdByUid == uid
+        && request.resource.data.updatedByUid == uid
+        && request.resource.data.deletedAt == null
         && request.resource.data.revision == 1
         && request.resource.data.createdAt == request.time
         && request.resource.data.updatedAt == request.time;
@@ -159,27 +228,297 @@ service cloud.firestore {
 
     function isValidMedicationUpdate(uid) {
       return hasValidElderlyProfile(uid)
-        && hasValidMedicationSchema(resource.data)
-        && hasValidMedicationSchema(request.resource.data)
         && resource.data.ownerUid == uid
-        && request.resource.data.ownerUid == resource.data.ownerUid
+        && resource.data.status in ['active', 'inactive']
+        && resource.data.revision is int
+        && resource.data.revision >= 1
+        && resource.data.createdAt is timestamp
+        && hasValidMedicationSchema(request.resource.data)
         && request.resource.data.ownerUid == uid
         && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.createdByUid == resource.data.get('createdByUid', uid)
+        && request.resource.data.updatedByUid == uid
         && request.resource.data.updatedAt == request.time
         && request.resource.data.revision == resource.data.revision + 1
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'name',
-          'strengthText',
-          'directionsText',
-          'status',
-          'updatedAt',
-          'revision'
+          'name', 'strengthText', 'dosage', 'dosageUnit', 'dosageForm',
+          'frequency', 'intakeTimes', 'directionsText', 'startDate',
+          'endDate', 'notes', 'status', 'createdByUid', 'updatedByUid',
+          'updatedAt', 'deletedAt', 'revision'
         ])
         && (
-          (resource.data.status == 'active'
-            && request.resource.data.status in ['active', 'inactive'])
-          || (resource.data.status == 'inactive'
-            && request.resource.data.status == 'inactive')
+          (
+            request.resource.data.status in ['active', 'inactive']
+            && request.resource.data.deletedAt == null
+          )
+          || (
+            request.resource.data.status == 'deleted'
+            && request.resource.data.deletedAt == request.time
+          )
+        );
+    }
+
+    function hasValidMedicationProposal(data) {
+      // A proposal is only a pending suggestion, not an official medication write.
+      // Keep this inexpensive; the full medication schema is checked again when
+      // the elderly owner approves and applies the change.
+      return data is map
+        && data.keys().hasAll([
+          'name', 'strengthText', 'dosage', 'dosageUnit', 'dosageForm',
+          'frequency', 'intakeTimes', 'directionsText', 'startDate', 'endDate', 'notes'
+        ])
+        && data.keys().hasOnly([
+          'name', 'strengthText', 'dosage', 'dosageUnit', 'dosageForm',
+          'frequency', 'intakeTimes', 'directionsText', 'startDate', 'endDate', 'notes'
+        ])
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.strengthText is string && data.strengthText.size() <= 80
+        && data.dosage is string && data.dosage.size() >= 1 && data.dosage.size() <= 40
+        && data.dosageUnit is string && data.dosageUnit.size() >= 1 && data.dosageUnit.size() <= 40
+        && data.dosageForm is string && data.dosageForm in ['tablet', 'capsule', 'syrup', 'solution', 'powder', 'other']
+        && data.frequency is int && data.frequency >= 1 && data.frequency <= 6
+        && data.intakeTimes is list
+        && data.intakeTimes.size() == data.frequency
+        && data.directionsText is string && data.directionsText.size() <= 500
+        && data.startDate is string && data.startDate.size() <= 10
+        && data.endDate is string && data.endDate.size() <= 10
+        && data.notes is string && data.notes.size() <= 500;
+    }
+
+    function hasValidMedicationRequestCreate(uid) {
+      let data = request.resource.data;
+      return hasActiveMedicationConnection(uid)
+        && data.keys().hasAll([
+          'ownerUid', 'medicationId', 'medicationName', 'requestType', 'proposedData',
+          'requestedByUid', 'reason', 'status', 'createdAt', 'updatedAt',
+          'reviewedByUid', 'reviewedAt', 'reviewNote'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid', 'medicationId', 'medicationName', 'requestType', 'proposedData',
+          'requestedByUid', 'reason', 'status', 'createdAt', 'updatedAt',
+          'reviewedByUid', 'reviewedAt', 'reviewNote'
+        ])
+        && data.ownerUid == uid
+        && data.requestedByUid == request.auth.uid
+        && data.medicationName is string
+        && data.medicationName.size() >= 1
+        && data.medicationName.size() <= 120
+        && data.requestType is string
+        && data.requestType in ['create', 'update', 'stop', 'delete']
+        && data.reason is string && data.reason.size() <= 500
+        && data.status == 'pending'
+        && data.createdAt == request.time
+        && data.updatedAt == request.time
+        && data.reviewedByUid == null
+        && data.reviewedAt == null
+        && data.reviewNote == ''
+        && (
+          (
+            data.requestType == 'create'
+            && data.medicationId == null
+            && hasValidMedicationProposal(data.proposedData)
+            && data.medicationName == data.proposedData.name
+          )
+          || (
+            data.requestType == 'update'
+            && data.medicationId is string
+            && data.medicationId.size() >= 1
+            && data.medicationId.size() <= 150
+            && hasValidMedicationProposal(data.proposedData)
+            && data.medicationName == data.proposedData.name
+          )
+          || (
+            data.requestType in ['stop', 'delete']
+            && data.medicationId is string
+            && data.medicationId.size() >= 1
+            && data.medicationId.size() <= 150
+            && data.proposedData == null
+          )
+        );
+    }
+
+    function isValidMedicationRequestReview(uid) {
+      return hasValidElderlyProfile(uid)
+        && resource.data.ownerUid == uid
+        && resource.data.status == 'pending'
+        && request.resource.data.ownerUid == resource.data.ownerUid
+        && request.resource.data.requestedByUid == resource.data.requestedByUid
+        && request.resource.data.requestType == resource.data.requestType
+        && request.resource.data.medicationId == resource.data.medicationId
+        && request.resource.data.medicationName == resource.data.medicationName
+        && request.resource.data.proposedData == resource.data.proposedData
+        && request.resource.data.reason == resource.data.reason
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.status in ['approved', 'rejected']
+        && request.resource.data.reviewedByUid == request.auth.uid
+        && request.resource.data.reviewedAt == request.time
+        && request.resource.data.updatedAt == request.time
+        && request.resource.data.reviewNote is string
+        && request.resource.data.reviewNote.size() <= 500
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'reviewedByUid', 'reviewedAt', 'updatedAt', 'reviewNote'
+        ]);
+    }
+
+    function hasMedicationNotificationRequestAfter(uid, data, expectedStatus) {
+      let requestAfter = getAfter(/databases/$(database)/documents/elderlyProfiles/$(uid)/medicationRequests/$(data.requestId)).data;
+      return requestAfter is map
+        && requestAfter.ownerUid == uid
+        && requestAfter.requestedByUid == (
+          data.eventType == 'proposal_submitted' ? request.auth.uid : requestAfter.requestedByUid
+        )
+        && requestAfter.status == expectedStatus
+        && requestAfter.medicationId == data.medicationId
+        && requestAfter.medicationName == data.medicationName
+        && requestAfter.requestType == data.requestType
+        && (
+          (expectedStatus == 'pending' && requestAfter.createdAt == request.time)
+          || (
+            expectedStatus in ['approved', 'rejected']
+            && requestAfter.reviewedByUid == request.auth.uid
+            && requestAfter.reviewedAt == request.time
+            && requestAfter.updatedAt == request.time
+            && data.decision == expectedStatus
+          )
+        );
+    }
+
+    function hasMedicationNotificationStatusAfter(uid, data, expectedStatus) {
+      let medicationAfter = getAfter(/databases/$(database)/documents/elderlyProfiles/$(uid)/medications/$(data.medicationId)).data;
+      let medicationBefore = get(/databases/$(database)/documents/elderlyProfiles/$(uid)/medications/$(data.medicationId)).data;
+      return medicationAfter is map
+        && medicationAfter.ownerUid == uid
+        && medicationAfter.status == expectedStatus
+        && medicationAfter.updatedByUid == request.auth.uid
+        && medicationAfter.updatedAt == request.time
+        && medicationAfter.revision == medicationBefore.revision + 1
+        && (
+          (expectedStatus == 'inactive' && medicationBefore.status == 'active')
+          || (expectedStatus == 'active' && medicationBefore.status == 'inactive')
+        );
+    }
+
+    function hasValidMedicationNotificationCreate(uid) {
+      let data = request.resource.data;
+      return hasValidElderlyProfile(uid) || hasActiveMedicationConnection(uid)
+        ? data.keys().hasAll([
+            'ownerUid', 'eventType', 'medicationId', 'medicationName',
+            'actorUid', 'actorName', 'actorRole', 'requestId',
+            'requestType', 'decision', 'createdAt'
+          ])
+          && data.keys().hasOnly([
+            'ownerUid', 'eventType', 'medicationId', 'medicationName',
+            'actorUid', 'actorName', 'actorRole', 'requestId',
+            'requestType', 'decision', 'createdAt'
+          ])
+          && data.ownerUid == uid
+          && data.actorUid == request.auth.uid
+          && data.actorName is string
+          && data.actorName.size() >= 1
+          && data.actorName.size() <= 80
+          && data.medicationName is string
+          && data.medicationName.size() >= 1
+          && data.medicationName.size() <= 120
+          && data.createdAt == request.time
+          && data.eventType is string
+          && data.eventType in [
+            'proposal_submitted', 'proposal_reviewed',
+            'medication_stopped', 'medication_reactivated'
+          ]
+          && (
+            data.medicationId == null
+            || (data.medicationId is string && data.medicationId.size() >= 1 && data.medicationId.size() <= 150)
+          )
+          && (
+            data.requestId == null
+            || (data.requestId is string && data.requestId.size() >= 1 && data.requestId.size() <= 150)
+          )
+          && (
+            data.requestType == null
+            || (data.requestType is string && data.requestType in ['create', 'update', 'stop', 'delete'])
+          )
+          && (
+            data.decision == null
+            || (data.decision is string && data.decision in ['approved', 'rejected'])
+          )
+          && (
+            (
+              data.eventType == 'proposal_submitted'
+              && hasActiveMedicationConnection(uid)
+              && data.actorRole == 'caregiver'
+              && data.requestId is string
+              && data.requestType in ['create', 'update', 'stop', 'delete']
+              && data.decision == null
+              && hasMedicationNotificationRequestAfter(uid, data, 'pending')
+            )
+            || (
+              data.eventType == 'proposal_reviewed'
+              && hasValidElderlyProfile(uid)
+              && data.actorRole == 'elderly'
+              && data.requestId is string
+              && data.requestType in ['create', 'update', 'stop', 'delete']
+              && data.decision in ['approved', 'rejected']
+              && hasMedicationNotificationRequestAfter(uid, data, data.decision)
+            )
+            || (
+              data.eventType == 'medication_stopped'
+              && hasValidElderlyProfile(uid)
+              && data.actorRole == 'elderly'
+              && data.medicationId is string
+              && data.requestId == null
+              && data.requestType == null
+              && data.decision == null
+              && hasMedicationNotificationStatusAfter(uid, data, 'inactive')
+            )
+            || (
+              data.eventType == 'medication_reactivated'
+              && hasValidElderlyProfile(uid)
+              && data.actorRole == 'elderly'
+              && data.medicationId is string
+              && data.requestId == null
+              && data.requestType == null
+              && data.decision == null
+              && hasMedicationNotificationStatusAfter(uid, data, 'active')
+            )
+          )
+        : false;
+    }
+
+    function hasValidMedicationIntakeLog(uid) {
+      let data = request.resource.data;
+      let medication = get(/databases/$(database)/documents/elderlyProfiles/$(uid)/medications/$(data.medicationId)).data;
+      return data.keys().hasAll([
+          'ownerUid', 'medicationId', 'medicationName', 'recordedByUid',
+          'recordedByRole', 'takenAt', 'note', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid', 'medicationId', 'medicationName', 'recordedByUid',
+          'recordedByRole', 'takenAt', 'note', 'createdAt'
+        ])
+        && data.ownerUid == uid
+        && data.medicationId is string
+        && data.medicationId.size() >= 1
+        && data.medicationId.size() <= 150
+        && medication is map
+        && medication.ownerUid == uid
+        && medication.status == 'active'
+        && data.medicationName == medication.name
+        && data.recordedByUid == request.auth.uid
+        && data.recordedByRole is string
+        && data.takenAt == request.time
+        && data.createdAt == request.time
+        && data.note is string
+        && data.note.size() <= 300
+        && (
+          (
+            request.auth.uid == uid
+            && hasValidElderlyProfile(uid)
+            && data.recordedByRole == 'elderly'
+          )
+          || (
+            hasActiveMedicationConnection(uid)
+            && data.recordedByRole == 'caregiver'
+          )
         );
     }
 
@@ -698,10 +1037,47 @@ service cloud.firestore {
     // A profile role from the UI never grants access; the canonical M2.3
     // `/users/{uid}` document is checked for every operation.
     match /elderlyProfiles/{uid}/medications/{medicationId} {
-      allow get, list: if hasValidElderlyProfile(uid);
+      // Both the owner and a connected caregiver may read; only the owner writes.
+      allow get, list: if canAccessMedicationProfile(uid);
       allow create: if isValidMedicationCreate(uid);
       allow update: if isValidMedicationUpdate(uid);
       allow delete: if false;
+    }
+
+    match /elderlyProfiles/{uid}/medicationRequests/{requestId} {
+      // A connected caregiver can create a proposal and read only their own requests.
+      // The elderly owner alone can approve or reject; requests are never deleted.
+      allow get: if hasValidElderlyProfile(uid)
+        || (hasActiveMedicationConnection(uid)
+          && resource.data.requestedByUid == request.auth.uid);
+      allow list: if (hasValidElderlyProfile(uid) && resource.data.ownerUid == uid)
+        || (hasActiveMedicationConnection(uid)
+          && resource.data.requestedByUid == request.auth.uid);
+      allow create: if hasValidMedicationRequestCreate(uid);
+      allow update: if isValidMedicationRequestReview(uid);
+      allow delete: if false;
+    }
+
+    match /elderlyProfiles/{uid}/medicationNotifications/{notificationId} {
+      // A shared in-app event stream for the owner and every currently connected caregiver.
+      // New events must be committed atomically with their proposal or medication status change.
+      allow get, list: if hasValidElderlyProfile(uid) || hasActiveMedicationConnection(uid);
+      allow create: if hasValidMedicationNotificationCreate(uid);
+      allow update, delete: if false;
+    }
+
+    match /elderlyProfiles/{uid}/medicationIntakeLogs/{logId} {
+      // Owner and active caregiver may read; either may append an immutable intake log.
+      allow get, list: if hasValidElderlyProfile(uid) || hasActiveMedicationConnection(uid);
+      allow create: if hasValidMedicationIntakeLog(uid);
+      allow update, delete: if false;
+    }
+
+    // Legal-representative authority is separate from family connection.
+    // Phase 04 deliberately keeps this surface denied until identity/evidence
+    // verification and explicit grant/revocation workflows are approved.
+    match /elderlyProfiles/{uid}/legalRepresentativeAuthorizations/{authorizationId} {
+      allow read, write: if false;
     }
 
     // M3.3: schedules use the same elderly-owner boundary as medications.
