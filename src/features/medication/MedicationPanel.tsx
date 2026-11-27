@@ -274,9 +274,19 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
   }
 
   function recordIntake(item: MedicationRecord) {
-    void perform(
-      () => recordMedicationIntake(user, profile, selectedSeniorUid, item),
-      "Đã ghi nhận uống thuốc.",
+    Alert.alert(
+      "Xác nhận đã uống thuốc?",
+      "Chỉ xác nhận nếu người cao tuổi đã thực tế uống thuốc này. Ứng dụng sẽ lưu người ghi nhận và thời điểm.",
+      [
+        { text: "Để sau", style: "cancel" },
+        {
+          text: "Xác nhận đã uống",
+          onPress: () => void perform(
+            () => recordMedicationIntake(user, profile, selectedSeniorUid, item),
+            "Đã ghi nhận uống thuốc.",
+          ),
+        },
+      ],
     );
   }
 
@@ -356,6 +366,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
           {!!intakeError && <Text style={styles.error}>{intakeError}</Text>}
           <View style={styles.requestPanel}>
             <Text style={styles.requestHeading}>Lịch sử ghi nhận uống thuốc</Text>
+            <Text style={styles.muted}>Nhật ký do người cao tuổi hoặc người chăm sóc ghi nhận; không phải xác minh y tế độc lập.</Text>
             {intakeLogs === null
               ? <View style={styles.loading}><ActivityIndicator color={colors.primary} /><Text style={styles.muted}>Đang tải lịch sử...</Text></View>
               : intakeLogs.length === 0
