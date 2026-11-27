@@ -4,6 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { colors } from "@/theme";
 import FamilyConnectionPanel from "@/features/connection/FamilyConnectionPanel";
+import MedicationPanel from "@/features/medication/MedicationPanel";
 
 const features = [
   {
@@ -51,6 +52,8 @@ export default function FamilyHomeScreen() {
         </View>
 
         <FamilyConnectionPanel />
+
+        <MedicationPanel />
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Tiện ích gia đình</Text>
