@@ -92,10 +92,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
   }, [selectedSeniorUid, scope]);
 
   useEffect(() => {
-    if (!selectedSeniorUid) {
-      setRequestSnapshot(null);
-      return;
-    }
+    if (!selectedSeniorUid) return;
     return watchMedicationRequests(
       selectedSeniorUid,
       user.uid,
@@ -112,10 +109,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
   }, [selectedSeniorUid, scope, user.uid, profile.role]);
 
   useEffect(() => {
-    if (!selectedSeniorUid) {
-      setIntakeSnapshot(null);
-      return;
-    }
+    if (!selectedSeniorUid) return;
     return watchMedicationIntakeLogs(
       selectedSeniorUid,
       value => {
