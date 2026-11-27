@@ -327,7 +327,7 @@ test("unrelated users cannot read/list/write pair, history, profiles or health r
   await assertFails(getDocs(query(collection(stranger,"connections"),where("familyUid","==","f1"))));
   await assertFails(getDocs(collection(db("f1"),"connections")));
   await assertFails(getDoc(userRef(db("f1"),"s1")));
-  await assertFails(getDoc(doc(db("f1"),"elderlyProfiles","s1","medications","m1")));
+  await assertFails(getDoc(doc(db("f2"),"elderlyProfiles","s1","medications","m1")));
   await assertFails(disconnect("f1","s1","ABCD2345","s3"));
   await assertFails(setDoc(pairRef(db("s1"),"f2","s1"),{ connectionId:"ABCD2345",status:"connected",updatedAt:serverTimestamp() }));
   await assertFails(setDoc(pairRef(db("s1"),"f1","s3"),{ connectionId:"ABCD2345",status:"connected",updatedAt:serverTimestamp() }));
