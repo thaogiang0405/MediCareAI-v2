@@ -75,3 +75,5 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - 8-character codes have 40 bits of entropy; Spark Rules do not supply a per-user server rate limiter. This is a limited staging/demo design, not a claim of production abuse resistance. Keep codes private.
 - No deployed Rules change or data migration performed. Existing unshipped single-member index is denied; no known cloud Phase 03 data. No deletion.
 - [ ] CI and Windows checks for this revision, then physical iPhone acceptance, then explicitly authorized staging Rules review and smoke test. PR remains draft.
+
+- Windows owner log for `325ccd7`: typecheck and ESLint passed; Firestore Rules Emulator 16/16 passed, including many-to-many and concurrent redemption. CI also passed TypeScript, ESLint, unit, Auth and Rules tests, but Expo Doctor 19/20 reported Expo 58.0.26 vs expected ~58.1.0. Align Expo dependency to ~58.1.0 (same SDK major), pending new CI and local install/device validation.
