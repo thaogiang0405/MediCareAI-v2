@@ -538,6 +538,87 @@ test("Phase 04: connected caregiver can read medications and submit proposals, b
   ));
 });
 
+test("Phase 04: owner approval applies a caregiver proposal atomically; rejection leaves the official list unchanged", async () => {
+  await seedUsers();
+  await assertSucceeds(issue("f1", "ABCD2345"));
+  await assertSucceeds(connect("f1", "s1", "ABCD2345"));
+
+  const senior = db("s1");
+  const caregiver = db("f1");
+  const medicationRef = doc(senior, "elderlyProfiles", "s1", "medications", "med-1");
+  await assertSucceeds(setDoc(medicationRef, medicationData("s1", "s1")));
+
+  const updateRequestRef = doc(caregiver, "elderlyProfiles", "s1", "medicationRequests", "update-request");
+  await assertSucceeds(setDoc(updateRequestRef, medicationRequestData("s1", "f1", "update", "med-1")));
+  await assertSucceeds(runTransaction(senior, async transaction => {
+    const requestSnapshot = await transaction.get(updateRequestRef);
+    const medicationSnapshot = await transaction.get(medicationRef);
+    const current = medicationSnapshot.data();
+    const proposed = medicationProposal({ dosage: "2", notes: "Người cao tuổi đã duyệt." });
+    transaction.update(medicationRef, {
+      ...proposed,
+      ownerUid: "s1",
+      createdByUid: current.createdByUid,
+      updatedByUid: "s1",
+      status: current.status,
+      deletedAt: null,
+      createdAt: current.createdAt,
+      updatedAt: serverTimestamp(),
+      revision: current.revision + 1,
+    });
+    transaction.update(updateRequestRef, {
+      status: "approved",
+      reviewedByUid: "s1",
+      reviewedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      reviewNote: "Đã đồng ý.",
+    });
+    if (!requestSnapshot.exists()) throw new Error("Expected pending request.");
+  }));
+  const updatedMedication = (await assertSucceeds(getDoc(medicationRef))).data();
+  assertEqual(updatedMedication.dosage, "2");
+  assertEqual(updatedMedication.revision, 2);
+  assertEqual((await assertSucceeds(getDoc(doc(senior, "elderlyProfiles", "s1", "medicationRequests", "update-request")))).data().status, "approved");
+
+  const createRequestRef = doc(caregiver, "elderlyProfiles", "s1", "medicationRequests", "create-request");
+  await assertSucceeds(setDoc(createRequestRef, medicationRequestData("s1", "f1", "create", null)));
+  const newMedicationRef = doc(senior, "elderlyProfiles", "s1", "medications", "med-from-request");
+  await assertSucceeds(runTransaction(senior, async transaction => {
+    const requestSnapshot = await transaction.get(createRequestRef);
+    transaction.set(newMedicationRef, {
+      ...medicationProposal({ name: "Thuốc do người thân đề xuất" }),
+      ownerUid: "s1",
+      createdByUid: "s1",
+      updatedByUid: "s1",
+      status: "active",
+      deletedAt: null,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      revision: 1,
+    });
+    transaction.update(createRequestRef, {
+      status: "approved",
+      reviewedByUid: "s1",
+      reviewedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      reviewNote: "Đã xem xét và đồng ý.",
+    });
+    if (!requestSnapshot.exists()) throw new Error("Expected pending create request.");
+  }));
+  assertEqual((await assertSucceeds(getDoc(newMedicationRef))).data().createdByUid, "s1");
+
+  const rejectedRequestRef = doc(caregiver, "elderlyProfiles", "s1", "medicationRequests", "rejected-request");
+  await assertSucceeds(setDoc(rejectedRequestRef, medicationRequestData("s1", "f1", "update", "med-1")));
+  await assertSucceeds(updateDoc(rejectedRequestRef, {
+    status: "rejected",
+    reviewedByUid: "s1",
+    reviewedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+    reviewNote: "Không đồng ý.",
+  }));
+  assertEqual((await assertSucceeds(getDoc(medicationRef))).data().dosage, "2");
+});
+
 test("Phase 04: connected caregiver and senior can append immutable medication intake logs", async () => {
   await seedUsers();
   await assertSucceeds(issue("f1", "ABCD2345"));
