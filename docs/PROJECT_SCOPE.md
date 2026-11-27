@@ -34,6 +34,7 @@ Chính sách được chủ dự án phê duyệt ngày 27/11/2026. Đặc tả 
 ## Bảo toàn Firebase và an toàn
 - Dùng Firebase project hiện tại; không tạo project mới, không xóa/di chuyển dữ liệu.
 - Không deploy Security Rules hoặc Cloud Functions nếu chưa được chủ dự án xem xét và chấp thuận riêng.
+- Rules staging đã Publish trước đó có thể vẫn cho phép caregiver ghi thuốc theo chính sách Phase 04 cũ; cho đến khi Rules owner-only mới được Publish, UI không thay thế bảo mật phía máy chủ và không dùng caregiver account để thử thao tác ghi trên dữ liệu sức khỏe staging.
 - Không commit `.env`, service account hoặc private key.
 - Không phát sinh phí: Spark, Email/Password, Firestore và Emulator; không Blaze, SMS, Storage hoặc dịch vụ trả phí.
 - Không merge Phase 04 trước khi CI, Windows và iPhone được kiểm thử, chủ dự án nghiệm thu rõ ràng.
