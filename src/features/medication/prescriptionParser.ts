@@ -63,7 +63,7 @@ function extractTimeSlots(text: string): string[] {
     if (!context) continue;
     foundTimeContext = true;
 
-    const parts = context[1].split(/\s*(?:,|;|\bvà\b|\bva\b)\s*/i);
+    const parts = context[1].split(/\s*(?:,|;|\s+và\s+|\s+va\s+)\s*/i);
     for (const part of parts) {
       const value = part.trim();
       if (!value) continue;
