@@ -7,6 +7,7 @@ const EXCLUDED_PREFIX = /^(?:ma|ngay|ghi chu|ham luong|lieu|so luong|thoi gian|t
 const TIME = /\b(?:[01]?\d|2[0-3]):[0-5]\d\b/g;
 const DOSE = /(?:mỗi\s+lần|liều(?:\s+mẫu|\s+dùng)?|liều\s+uống)\s*[:：]?\s*(\d+(?:[.,]\d+)?|\d+\s*\/\s*\d+)\s*(viên\s*nang|viên|ml|gói|giọt|ống|thìa|mg|mcg|g)(?:\s*\/\s*lần)?/i;
 const DOSE_SHORT = /(\d+(?:[.,]\d+)?|\d+\s*\/\s*\d+)\s*(viên\s*nang|viên|ml|gói|giọt|ống|thìa|mg|mcg|g)\s*\/\s*lần/i;
+const FREQUENCY = /(?:mỗi\s+ngày|ngày)\s*(\d+)\s*lần|\b(\d+)\s*lần\s*\/\s*ngày/i;
 
 function cleanLine(value: string): string {
   return value.replace(/[•·▪◦]/g, " ").replace(/\s+/g, " ").trim();
@@ -58,7 +59,7 @@ function extractDirections(lines: string[]): string {
     if (!/(huong dan|dung luc|uong luc|sau an|truoc an|truoc khi ngu|sau bua|lac deu|sau khi an|truoc bua)/.test(normalized)) return [];
     return [line
       .replace(/^(?:hướng dẫn|ghi chú)\s*[:：]?\s*/i, "")
-      .replace(/(?:dùng lúc|uống lúc)\s*(?:[A-Z]{1,3}\s*)?\d[\d:./-]*\s*[,;]?/i, "")
+      .replace(/(?:dùng lúc|uống lúc)\s*\d{1,2}:\d{2}\s*[,;]?/i, "")
       .trim()];
   });
   return [...new Set(collected)].join(" ").slice(0, 500);

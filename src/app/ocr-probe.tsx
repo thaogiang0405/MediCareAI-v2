@@ -264,6 +264,7 @@ export default function OcrProbe() {
           {selectedCandidate && <>
             <Text style={styles.heading}>{selectedCandidate.label}</Text>
             <Text style={styles.body}>Thời gian: {elapsed?.toFixed(1)} giây</Text>
+            <Text style={styles.muted}>Ảnh OCR: {processedSize?.width} × {processedSize?.height} px</Text>
             <Text selectable style={styles.body}>{selectedCandidate.text.trim() || "Không nhận diện được chữ."}</Text>
             <Pressable accessibilityRole="button" style={styles.primary} onPress={analyzeSelectedText}><Text style={styles.primaryText}>Phân tích thành danh sách thuốc</Text></Pressable>
           </>}
