@@ -25,12 +25,12 @@ Chính sách được chủ dự án phê duyệt ngày 27/11/2026. Đặc tả 
 - Thông báo trong ứng dụng dùng chung cho người cao tuổi và tất cả người chăm sóc đang kết nối: gửi đề xuất, duyệt/từ chối, ngừng thuốc và sử dụng lại. Người chăm sóc khác nhận được sự kiện nhưng không được sửa/duyệt đề xuất của người khác.
 - Khi ngừng thuốc, lưu sự kiện có thời điểm và người thực hiện; người cao tuổi có nút Sử dụng lại ở mục Đã ngừng và màn hình Chỉnh sửa.
 - Ngắt kết nối thu hồi quyền đọc thuốc, đề xuất, nhật ký và thông báo của người chăm sóc.
-- Push notification khi ứng dụng đóng/màn hình khóa chưa thuộc Phase 04; cần thiết kế riêng trong Phase 05.
+- Phase 04 chỉ có thông báo trong ứng dụng; Phase 05 chỉ bổ sung Local Notifications.
 - Người đại diện hợp pháp/được ủy quyền là một loại thẩm quyền riêng, không suy ra từ kết nối gia đình. Phase 04 chưa cấp quyền đại diện; dữ liệu và quyền này mặc định bị từ chối cho đến khi có quy trình xác minh, cấp quyền và thu hồi được phê duyệt.
 - Giữ nguyên đường dẫn dữ liệu thuốc hiện có `elderlyProfiles/{seniorUid}/medications/{medicationId}`; không xóa hoặc di chuyển dữ liệu.
 
 ## Các giai đoạn tiếp theo
-- Phase 05: lịch chăm sóc, nhắc giờ, push notification khi ứng dụng đóng, và quy trình xác nhận liều theo phạm vi được phê duyệt.
+- Phase 05: lịch thuốc theo ngày từ thuốc chính thức, xác nhận từng liều không trùng, Local Notifications trên thiết bị (không remote push), đọc lịch tiếng Việt, caregiver theo dõi người đã kết nối. Nhật ký cũ giữ nguyên. Không xây dựng lịch khám hoặc chăm sóc khác trong phase này.
 - Phase 06: OCR đơn thuốc, luôn yêu cầu người dùng xác nhận nội dung nhận dạng; không tự kê đơn.
 - Các giai đoạn sức khỏe/AI khác chỉ được thực hiện theo phạm vi đề tài và không chẩn đoán hoặc kê đơn.
 
@@ -40,7 +40,7 @@ Chính sách được chủ dự án phê duyệt ngày 27/11/2026. Đặc tả 
 - Rules staging đã Publish trước đó có thể chưa cho phép các collection Phase 04 mới; cho đến khi chủ dự án Publish `firestore.rules`, thao tác đề xuất/thông báo có thể bị `permission-denied`. UI không thay thế bảo mật phía máy chủ.
 - Không commit `.env`, service account hoặc private key.
 - Không phát sinh phí: Spark, Email/Password, Firestore và Emulator; không Blaze, SMS, Storage hoặc dịch vụ trả phí.
-- Không merge Phase 04 trước khi CI, Windows và iPhone được kiểm thử, chủ dự án nghiệm thu rõ ràng.
+- Phase 04 đã merge qua PR #3; Phase 05 chỉ merge sau khi kiểm thử và chủ dự án nghiệm thu rõ ràng.
 
 ## Tiêu chí nghiệm thu chung
 - TypeScript, ESLint, Unit tests, Auth Emulator, Firestore Rules Emulator và Expo Doctor đạt.

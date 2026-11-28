@@ -1,6 +1,6 @@
 # Tiến độ — MediCare AI V2
 
-Cập nhật: 26/11/2026
+Cập nhật: 28/11/2026
 
 ## Phase 01 — Nền tảng và giao diện
 
@@ -28,7 +28,7 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 4. Chụp lại màn hình đăng nhập, đăng ký và hai trang chủ để rà soát kích thước thực tế.
 5. Sau khi giao diện ổn định, chuẩn bị tích hợp Firebase Authentication bằng Firebase project hiện tại.
 
-## Phase 02 — Authentication (in progress, not accepted)
+## Phase 02 — Authentication (merged)
 - Owner reports Phase 01 UI accepted on physical iPhone on 26/11/2026; technical test logs not independently verified.
 - Feature branch: feature/phase-02-auth, based on ecb72322bafa0839d0e2272d62c9f21f5942ffda.
 - Implemented Firebase initialization with Emulator default and a separately gated staging mode, persistence, registration, login, password reset request, missing-profile recovery, profile edit/logout, protected routes, emulator-only owner-scoped Rules and test source.
@@ -52,7 +52,7 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - Latest local-device, Windows CLI and iPhone checks remain unverified. Firebase Auth/Firestore cloud staging has not been smoke-tested. No cloud data write, Rules deployment, billing change, PR creation or merge has occurred.
 
 
-## Phase 03 — Family Connection (in progress)
+## Phase 03 — Family Connection (merged)
 - [x] Confirmed Phase 02 merge commit 0e38f65 and created feature/phase-03-family-connection from main.
 - [x] Recovered the original Phase 03 scope: family creates a one-use 8-character code; senior previews the family name and confirms; either participant can disconnect; reconnection uses a new code.
 - [x] Implement one-use 8-character invites, 15-minute expiry, current-member indexes and immutable connection-history documents with atomic writes.
@@ -61,7 +61,7 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - [x] Add a security invariant so a senior can create member-index records only for the exact family/senior participants in the connection.
 - [x] Expand Firestore Rules Emulator tests for invite creation/use, unauthorized reads, cross-account member-index writes, disconnect and reconnect (12/12 passed).
 - [ ] Pull to Windows, install SDK 58-compatible Expo modules, and test the full create → connect → disconnect → reconnect flow on iPhone.
-- [ ] Obtain owner acceptance before merging the Pull Request.
+- [x] Phase 03 merged into main (3afd62f), superseding earlier pending notes.
 - GitHub Actions run `45856353502` (push) and `45856365322` (Pull Request), commit `8a10b69`: TypeScript, ESLint, unit tests (7/7), Auth Emulator (1/1), Firestore Rules Emulator (12/12) and Expo Doctor (20/20) passed. The production dependency audit still reports 3 moderate upstream `minimatch` advisories; it is non-blocking and documented above.
 - No Firestore Rules have been deployed to the existing Firebase project; the PR remains draft pending Windows/iPhone acceptance.
 
@@ -87,7 +87,7 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - Preserve the agreed invitation flow: family member creates the code; senior enters and confirms. Keep existing Firebase data model, transaction logic, Security Rules, and authorization unchanged.
 - Compact the home header, greeting spacing and feature cards for iPhone. UI refinement is pending CI and physical iPhone acceptance.
 
-## Phase 04 — Medication Management (policy revision in progress)
+## Phase 04 — Medication Management (merged)
 
 - Started from Phase 03 merge commit 3afd62f on feature/phase-04-medication-management.
 - Preserved the existing medication collection path `elderlyProfiles/{seniorUid}/medications` and legacy M3.2/M3.3/M3.4 references. No migration or deletion.
@@ -97,7 +97,7 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - Added append-only `medicationIntakeLogs` subcollection. The elderly owner and connected caregiver can record and read medication intake; no client can update/delete a log.
 - Added shared `medicationNotifications` event stream. Caregiver proposal + notification, every owner approve/reject decision + notification, and stop/reactivate status + notification are committed atomically. An approved stop emits both `proposal_reviewed` and `medication_stopped`. The elderly owner and every currently connected caregiver receive the same real-time in-app event; disconnected caregivers lose read access.
 - Added owner-only medication reactivation. Inactive medicines can be restored from the inactive card or the edit sheet; each stop/reactivation event records server time and actor and appears in the notification feed/history.
-- Added `firestore.rules` as the deployable canonical Rules source; `firebase.json` points to it and `firebase.emulator.json` plus Rules tests now use the same file. Deployment is configured but has not been run against Firebase staging.
+- Added `firestore.rules` as the deployable canonical Rules source; `firebase.json` points to it and `firebase.emulator.json` plus Rules tests use the same file. Phase 04 Rules were published to staging on 27/11/2026.
 - Firestore Emulator Rules now allow medication reads to the owner and active caregiver but restrict medication create/update to the owner. Requests, review decisions, intake logs, and connection revocation have dedicated Rules. Caregiver access is revoked after disconnect.
 - Legal-representative authority is separate from family connection. Phase 04 does not grant this authority; `legalRepresentativeAuthorizations` is explicitly default-deny until an approved identity/evidence verification, grant, scope, expiry and revocation process exists.
 - Added [PHASE-04-MEDICATION-POLICY.md](PHASE-04-MEDICATION-POLICY.md) and aligned PROJECT_SCOPE.md with the approved permission matrix.
@@ -106,5 +106,18 @@ Các thay đổi giao diện đã được ghi lên nhánh main của GitHub. M�
 - [ ] Pull latest branch to Windows and rerun typecheck, lint, tests, Auth Emulator, Rules Emulator and Expo Doctor.
 - [ ] Test owner add/edit/stop/restore/delete, caregiver proposal/review, real-time notifications to the senior and two caregivers, status history, intake logs and disconnect revocation on iPhone.
 - [x] Owner reviewed and approved deployment; `npx --yes firebase-tools deploy --only firestore:rules --project medicare-ai-cf804` completed successfully on 27/11/2026. Firebase confirmed `firestore.rules` compiled and was released. No data migration or deletion was performed.
-- [ ] Owner acceptance before merging PR; do not merge in this work.
+- [x] Owner confirmed Phase 04 functionality; PR #3 merged into main at b89fd7238915b9e40c154a946247875efd6273a1. Caregiver UI PR #4 remains draft and untouched.
 - In-app medication notifications are included in Phase 04. Remote push notifications while the app is closed, OCR, and scheduled dose confirmation remain future work (Phase 05/06). No paid service or native dependency added.
+
+
+## Phase 05 — Medication schedule, local reminders and voice (in progress)
+
+- Started on `feature/phase-05-medication-reminders` from Phase 04 merge `b89fd72`; no changes to UI redesign branch or PR #4.
+- Derived schedule from complete active medications, Vietnam timezone, inclusive start/end dates; past dates show actual logs only. No invented dose/time.
+- Scheduled intake uses immutable `dose_YYYY-MM-DD_HH:mm_medicationId` log ID, Firestore transaction and strict Rules; legacy Phase 04 logs are still readable but not counted as scheduled doses. Existing intake UI routes to individual doses. Rules changes not deployed.
+- Added dedicated schedule screen, date picker, status and confirmed count, connected caregiver profile selector, compact home entry and Vietnamese speech with stop control.
+- Local notification plan groups by time, max 48 future slots within 7 days, private lock-screen content, per-device/account opt-in, cancel/reconcile on data, foreground and logout. No remote push or cloud services. Native module loaded lazily.
+- [x] CI PR run `46097233395` on implementation commit `b41a0fd`: TypeScript passed, ESLint passed with one cleanup-ref warning, unit tests 11/11, Auth Emulator 1/1, Rules Emulator 26/26 (including concurrent confirmation), Expo Doctor 20/20. No Rules expression-budget warning. Audit still reports 3 moderate upstream minimatch findings; do not force-downgrade Expo.
+- [ ] Windows checks and explicit approval to publish the Phase 05 Rules to medicare-ai-cf804.
+- [ ] Physical iPhone acceptance: live confirmation, multi-caregiver isolation, notifications in foreground/background/closed Expo Go, logout cancellation, voice and audio.
+- Optional notes remain supported in the data layer; current confirmation UI uses an empty note. Notification plan is bounded; local delivery and synchronization while the app is closed are not guaranteed. No merge before owner acceptance.

@@ -4,6 +4,7 @@ import { StatusBar } from "expo-status-bar";
 import { ActivityIndicator, Button, Text, View } from "react-native";
 import { AuthProvider, useAuth } from "@/features/auth/AuthProvider";
 import { services } from "@/lib/firebase";
+import { ReminderProvider } from "@/features/medication/ReminderProvider";
 
 function Routes() {
   const session = useAuth();
@@ -28,7 +29,8 @@ function Routes() {
     </Stack.Protected>
     <Stack.Protected guard={session.status === "ready"}>
       <Stack.Screen name="profile"/>
+      <Stack.Screen name="medication-schedule"/>
     </Stack.Protected>
   </Stack>;
 }
-export default function RootLayout(){return <SafeAreaProvider><StatusBar style="dark"/><AuthProvider><Routes/></AuthProvider></SafeAreaProvider>}
+export default function RootLayout(){return <SafeAreaProvider><StatusBar style="dark"/><AuthProvider><ReminderProvider><Routes/></ReminderProvider></AuthProvider></SafeAreaProvider>}
