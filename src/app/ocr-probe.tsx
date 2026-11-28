@@ -171,15 +171,6 @@ export default function OcrProbe() {
       : draft));
   }
 
-  function addTime(index: number) {
-    setDrafts(current => current.map((draft, itemIndex) => {
-      if (itemIndex !== index || draft.frequency >= 6 || draft.intakeTimes.length >= 6) return draft;
-      const nextCount = draft.frequency > 0 ? draft.frequency + 1 : Math.max(1, draft.intakeTimes.length);
-      const intakeTimes = Array.from({ length: nextCount }, (_, timeIndex) => draft.intakeTimes[timeIndex] ?? "");
-      return { ...draft, frequency: nextCount, intakeTimes };
-    }));
-  }
-
   function updateTime(index: number, timeIndex: number, value: string) {
     setDrafts(current => current.map((draft, itemIndex) => itemIndex === index
       ? { ...draft, intakeTimes: draft.intakeTimes.map((time, currentIndex) => currentIndex === timeIndex ? value : time) }
@@ -303,7 +294,7 @@ export default function OcrProbe() {
         </View>}
         {drafts.length > 0 && <View style={styles.empty}>
           <Text style={styles.heading}>Kiểm tra {drafts.length} mục thuốc</Text>
-          <Text style={styles.warning}>OCR chỉ gợi ý nội dung. Hãy đối chiếu với đơn thuốc gốc hoặc người kê đơn. Trường chưa nhận diện được phải tự nhập; ứng dụng không tự điền liều hoặc giờ.</Text>
+          <Text style={styles.warning}>OCR chỉ đọc văn bản, không xác minh được tên thuốc. Hãy đối chiếu từng tên với ảnh đơn thuốc hoặc bao bì. Nếu không đọc chắc chắn, không xác nhận và không lưu. Trường chưa nhận diện được phải tự chọn hoặc nhập; ứng dụng không tự đoán liều hay giờ.</Text>
           {parseWarnings.map((warning, index) => <Text key={index} style={styles.warning}>{warning}</Text>)}
           {drafts.map((draft, index) => {
             const validation = medicationValidationError(draft);
@@ -353,7 +344,6 @@ export default function OcrProbe() {
                   <Text style={styles.timeButtonAction}>Chọn giờ</Text>
                 </Pressable>
               </View>)}
-              <Pressable accessibilityRole="button" disabled={saving || draft.frequency >= 6 || draft.intakeTimes.length >= 6} style={styles.secondary} onPress={() => addTime(index)}><Text style={styles.secondaryText}>＋ Thêm khung giờ</Text></Pressable>
               <Text style={styles.fieldLabel}>Hướng dẫn sử dụng</Text>
               <TextInput value={draft.directionsText} onChangeText={value => updateDraft(index, { directionsText: value })} style={[styles.input, styles.multiline]} multiline placeholder="Ví dụ: sau ăn" />
               {!!validation && <Text style={styles.error}>{validation}</Text>}
