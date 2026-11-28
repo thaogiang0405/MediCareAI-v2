@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
@@ -75,6 +75,11 @@ export default function OcrProbe() {
   const [candidates, setCandidates] = useState<OcrCandidate[]>([]);
   const [selectedCandidateIndex, setSelectedCandidateIndex] = useState(0);
   const [drafts, setDrafts] = useState<MedicationDraft[]>([]);
+  const [sourceNameLines, setSourceNameLines] = useState<string[]>([]);
+  const [nameConfirmed, setNameConfirmed] = useState<boolean[]>([]);
+  const [timePickerTarget, setTimePickerTarget] = useState<{ draftIndex: number; timeIndex: number } | null>(null);
+  const [pickerHour, setPickerHour] = useState<number | null>(null);
+  const [pickerMinute, setPickerMinute] = useState<number | null>(null);
   const [parseWarnings, setParseWarnings] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [elapsed, setElapsed] = useState<number | null>(null);
@@ -83,7 +88,7 @@ export default function OcrProbe() {
   const [saveError, setSaveError] = useState("");
   const source = useMemo(() => job ? { html: probeHtml(job.image), baseUrl: "https://localhost/" } : null, [job]);
   const selectedCandidate = candidates[selectedCandidateIndex] ?? candidates[0] ?? null;
-  const canSave = drafts.length > 0 && drafts.every(draft => medicationValidationError(draft) === null);
+  const canSave = drafts.length > 0 && drafts.every((draft, index) => medicationValidationError(draft) === null && nameConfirmed[index] === true);
 
   useEffect(() => {
     if (!job) return;
@@ -93,7 +98,7 @@ export default function OcrProbe() {
 
   function resetResult() {
     setError(""); setCandidates([]); setSelectedCandidateIndex(0); setElapsed(null); setProgress(null); setProcessedSize(null);
-    setDrafts([]); setParseWarnings([]); setSaveError("");
+    setDrafts([]); setSourceNameLines([]); setNameConfirmed([]); setTimePickerTarget(null); setParseWarnings([]); setSaveError("");
   }
 
   async function pick(camera: boolean) {
@@ -138,30 +143,40 @@ export default function OcrProbe() {
       return;
     }
     const parsed = parsePrescriptionText(selectedCandidate.text);
-    setDrafts(parsed.medications); setParseWarnings(parsed.warnings); setSaveError("");
+    setDrafts(parsed.medications);
+    setSourceNameLines(parsed.sourceNameLines);
+    setNameConfirmed(parsed.medications.map(() => false));
+    setParseWarnings(parsed.warnings);
+    setSaveError("");
     if (parsed.medications.length === 0) Alert.alert("Chưa tìm thấy thuốc", parsed.warnings.join("\n"));
   }
 
   function updateDraft(index: number, changes: Partial<MedicationDraft>) {
     setDrafts(current => current.map((draft, itemIndex) => itemIndex === index ? { ...draft, ...changes } : draft));
+    if (changes.name !== undefined) {
+      setNameConfirmed(current => current.map((confirmed, itemIndex) => itemIndex === index ? false : confirmed));
+    }
   }
 
-  function changeFrequency(index: number, value: string) {
-    if (!/^\d*$/.test(value)) return;
-    const count = value === "" ? 0 : Number(value);
-    if (count > 6) return;
+  function removeDraft(index: number) {
+    setDrafts(current => current.filter((_, itemIndex) => itemIndex !== index));
+    setSourceNameLines(current => current.filter((_, itemIndex) => itemIndex !== index));
+    setNameConfirmed(current => current.filter((_, itemIndex) => itemIndex !== index));
+  }
+
+  function changeFrequency(index: number, count: number) {
+    if (count < 1 || count > 6) return;
     setDrafts(current => current.map((draft, itemIndex) => itemIndex === index
-      ? { ...draft, frequency: count, intakeTimes: count > 0
-        ? Array.from({ length: count }, (_, timeIndex) => draft.intakeTimes[timeIndex] ?? "")
-        : draft.intakeTimes }
+      ? { ...draft, frequency: count, intakeTimes: Array.from({ length: count }, (_, timeIndex) => draft.intakeTimes[timeIndex] ?? "") }
       : draft));
   }
 
   function addTime(index: number) {
     setDrafts(current => current.map((draft, itemIndex) => {
-      if (itemIndex !== index || draft.intakeTimes.length >= 6) return draft;
-      const intakeTimes = [...draft.intakeTimes, ""];
-      return { ...draft, intakeTimes, frequency: draft.frequency > 0 ? intakeTimes.length : 0 };
+      if (itemIndex !== index || draft.frequency >= 6) return draft;
+      const nextCount = Math.max(draft.frequency, draft.intakeTimes.length) + 1;
+      const intakeTimes = Array.from({ length: nextCount }, (_, timeIndex) => draft.intakeTimes[timeIndex] ?? "");
+      return { ...draft, frequency: nextCount, intakeTimes };
     }));
   }
 
@@ -171,13 +186,30 @@ export default function OcrProbe() {
       : draft));
   }
 
+  function openTimePicker(index: number, timeIndex: number, currentTime: string) {
+    const match = /^([01]\\d|2[0-3]):([0-5]\\d)$/.exec(currentTime);
+    setPickerHour(match ? Number(match[1]) : null);
+    setPickerMinute(match ? Number(match[2]) : null);
+    setTimePickerTarget({ draftIndex: index, timeIndex });
+  }
+
+  function confirmTimeSelection() {
+    if (!timePickerTarget || pickerHour === null || pickerMinute === null) return;
+    updateTime(timePickerTarget.draftIndex, timePickerTarget.timeIndex,
+      String(pickerHour).padStart(2, "0") + ":" + String(pickerMinute).padStart(2, "0"));
+    setTimePickerTarget(null);
+  }
+
   function addManualDraft() {
-    if (drafts.length < 10) setDrafts(current => [...current, emptyDraft()]);
+    if (drafts.length >= 10) return;
+    setDrafts(current => [...current, emptyDraft()]);
+    setSourceNameLines(current => [...current, ""]);
+    setNameConfirmed(current => [...current, false]);
   }
 
   async function saveReviewedDrafts() {
     if (saving || !canSave || !user || !profile || !seniorUid) {
-      Alert.alert("Chưa thể lưu", "Hãy kiểm tra đầy đủ tên thuốc, liều lượng, đơn vị, số lần/ngày và từng giờ uống trước khi tiếp tục.");
+      Alert.alert("Chưa thể lưu", "Hãy kiểm tra tên thuốc với ảnh gốc, xác nhận từng tên, rồi hoàn thiện liều lượng, đơn vị, số lần/ngày và giờ uống.");
       return;
     }
     setSaving(true); setSaveError("");
@@ -257,7 +289,7 @@ export default function OcrProbe() {
           <View style={styles.candidateList}>
             {candidates.map((candidate, index) => <Pressable key={candidate.id} accessibilityRole="button"
               style={[styles.candidateButton, selectedCandidateIndex === index && styles.candidateButtonActive]}
-              onPress={() => { setSelectedCandidateIndex(index); setDrafts([]); setParseWarnings([]); }}>
+              onPress={() => { setSelectedCandidateIndex(index); setDrafts([]); setSourceNameLines([]); setNameConfirmed([]); setParseWarnings([]); }}>
               <Text style={styles.candidateText}>Kết quả {index + 1}</Text><Text style={styles.muted}>{candidate.confidence}%</Text>
             </Pressable>)}
           </View>
@@ -278,10 +310,18 @@ export default function OcrProbe() {
             return <View key={index} style={styles.medicationDraftCard}>
               <View style={styles.draftHeader}>
                 <Text style={styles.heading}>Thuốc {index + 1}</Text>
-                <Pressable accessibilityRole="button" disabled={saving} onPress={() => setDrafts(current => current.filter((_, itemIndex) => itemIndex !== index))}><Text style={styles.removeText}>Bỏ mục này</Text></Pressable>
+                <Pressable accessibilityRole="button" disabled={saving} onPress={() => removeDraft(index)}><Text style={styles.removeText}>Bỏ mục này</Text></Pressable>
               </View>
               <Text style={styles.fieldLabel}>Tên thuốc *</Text>
-              <TextInput value={draft.name} onChangeText={value => updateDraft(index, { name: value })} style={styles.input} placeholder="Tên thuốc" />
+              <Text style={styles.muted}>{sourceNameLines[index] ? "Dòng OCR gốc: " + sourceNameLines[index] : "Tên thuốc nhập thủ công. Hãy kiểm tra chính tả trước khi xác nhận."}</Text>
+              <TextInput value={draft.name} onChangeText={value => updateDraft(index, { name: value })} style={styles.input} placeholder="Nhập đúng tên trên bao bì/đơn thuốc" />
+              <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: nameConfirmed[index] === true }} disabled={saving || !draft.name.trim()} style={[styles.nameConfirmButton, nameConfirmed[index] && styles.nameConfirmButtonActive]} onPress={() => setNameConfirmed(current => current.map((confirmed, itemIndex) => itemIndex === index ? !confirmed : confirmed))}>
+                <View style={[styles.checkboxBox, nameConfirmed[index] && styles.checkboxBoxActive]}>
+                  <Text style={styles.checkboxMark}>{nameConfirmed[index] ? "✓" : ""}</Text>
+                </View>
+                <Text style={styles.nameConfirmText}>Tôi đã đối chiếu tên thuốc với ảnh gốc và xác nhận chính xác.</Text>
+              </Pressable>
+              {!nameConfirmed[index] && <Text style={styles.warning}>Tên thuốc chưa được xác nhận. Nếu OCR đọc sai, hãy sửa tên trước khi tích xác nhận.</Text>}
               <Text style={styles.fieldLabel}>Hàm lượng</Text>
               <TextInput value={draft.strengthText} onChangeText={value => updateDraft(index, { strengthText: value })} style={styles.input} placeholder="Ví dụ: 500 mg" />
               <View style={styles.row}>
@@ -301,10 +341,17 @@ export default function OcrProbe() {
                 </Pressable>)}
               </View>
               <Text style={styles.fieldLabel}>Số lần sử dụng trong ngày *</Text>
-              <TextInput value={draft.frequency > 0 ? String(draft.frequency) : ""} onChangeText={value => changeFrequency(index, value)} style={styles.input} placeholder="Nhập số lần/ngày (1–6)" keyboardType="number-pad" />
+              <View style={styles.formChoices}>
+                {[1, 2, 3, 4, 5, 6].map(count => <Pressable key={count} accessibilityRole="button" accessibilityState={{ selected: draft.frequency === count }} disabled={saving} onPress={() => changeFrequency(index, count)} style={[styles.choice, draft.frequency === count && styles.choiceActive]}>
+                  <Text style={[styles.choiceText, draft.frequency === count && styles.choiceTextActive]}>{count} lần</Text>
+                </Pressable>)}
+              </View>
               {draft.intakeTimes.map((time, timeIndex) => <View key={timeIndex} style={styles.field}>
                 <Text style={styles.fieldLabel}>Giờ uống lần {timeIndex + 1} *</Text>
-                <TextInput value={time} onChangeText={value => updateTime(index, timeIndex, value)} style={styles.input} placeholder="HH:mm, ví dụ 08:00" />
+                <Pressable accessibilityRole="button" disabled={saving} onPress={() => openTimePicker(index, timeIndex, time)} style={[styles.input, styles.timeButton]}>
+                  <Text style={[styles.timeButtonText, !time && styles.timePlaceholder]}>{time || "Chạm để chọn giờ uống"}</Text>
+                  <Text style={styles.timeButtonAction}>Chọn giờ</Text>
+                </Pressable>
               </View>)}
               <Pressable accessibilityRole="button" disabled={saving || draft.intakeTimes.length >= 6} style={styles.secondary} onPress={() => addTime(index)}><Text style={styles.secondaryText}>＋ Thêm khung giờ</Text></Pressable>
               <Text style={styles.fieldLabel}>Hướng dẫn sử dụng</Text>
@@ -320,9 +367,40 @@ export default function OcrProbe() {
           <Pressable accessibilityRole="button" disabled={saving || !canSave || !user || !profile || !seniorUid} style={[styles.primary, (saving || !canSave) && styles.disabled]} onPress={() => void saveReviewedDrafts()}>
             {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>{family ? "Gửi đề xuất thuốc" : "Xác nhận và thêm thuốc"}</Text>}
           </Pressable>
-          {!canSave && <Text style={styles.muted}>Chưa thể lưu: hãy hoàn thiện các trường bắt buộc và giờ uống theo định dạng HH:mm.</Text>}
+          {!canSave && <Text style={styles.muted}>Chưa thể lưu: hãy hoàn thiện thông tin, chọn giờ uống và xác nhận đã đối chiếu tên của từng thuốc với ảnh gốc.</Text>}
         </View>}
       </ScrollView>
+      <Modal visible={timePickerTarget !== null} transparent animationType="slide" onRequestClose={() => setTimePickerTarget(null)}>
+        <View style={styles.timePickerOverlay}>
+          <View style={styles.timePickerCard}>
+            <Text style={styles.heading}>Chọn giờ uống</Text>
+            <Text style={styles.muted}>Chạm chọn một số ở cột giờ và một số ở cột phút.</Text>
+            <View style={styles.timePickerColumns}>
+              <View style={styles.timePickerColumn}>
+                <Text style={styles.fieldLabel}>Giờ</Text>
+                <ScrollView style={styles.timePickerScroll} contentContainerStyle={styles.timePickerOptions}>
+                  {Array.from({ length: 24 }, (_, hour) => <Pressable key={hour} accessibilityRole="button" accessibilityState={{ selected: pickerHour === hour }} onPress={() => setPickerHour(hour)} style={[styles.timePickerOption, pickerHour === hour && styles.timePickerOptionActive]}>
+                    <Text style={[styles.timePickerOptionText, pickerHour === hour && styles.timePickerOptionTextActive]}>{String(hour).padStart(2, "0")}</Text>
+                  </Pressable>)}
+                </ScrollView>
+              </View>
+              <View style={styles.timePickerColumn}>
+                <Text style={styles.fieldLabel}>Phút</Text>
+                <ScrollView style={styles.timePickerScroll} contentContainerStyle={styles.timePickerOptions}>
+                  {Array.from({ length: 60 }, (_, minute) => <Pressable key={minute} accessibilityRole="button" accessibilityState={{ selected: pickerMinute === minute }} onPress={() => setPickerMinute(minute)} style={[styles.timePickerOption, pickerMinute === minute && styles.timePickerOptionActive]}>
+                    <Text style={[styles.timePickerOptionText, pickerMinute === minute && styles.timePickerOptionTextActive]}>{String(minute).padStart(2, "0")}</Text>
+                  </Pressable>)}
+                </ScrollView>
+              </View>
+            </View>
+            <Text style={styles.timePickerPreview}>Giờ đã chọn: {pickerHour === null || pickerMinute === null ? "Chưa chọn đủ" : String(pickerHour).padStart(2, "0") + ":" + String(pickerMinute).padStart(2, "0")}</Text>
+            <View style={styles.row}>
+              <Pressable accessibilityRole="button" style={[styles.secondary, styles.timePickerAction]} onPress={() => setTimePickerTarget(null)}><Text style={styles.secondaryText}>Hủy</Text></Pressable>
+              <Pressable accessibilityRole="button" disabled={pickerHour === null || pickerMinute === null} style={[styles.primary, styles.timePickerAction, (pickerHour === null || pickerMinute === null) && styles.disabled]} onPress={confirmTimeSelection}><Text style={styles.primaryText}>Xác nhận giờ</Text></Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -352,6 +430,29 @@ const styles = StyleSheet.create({
   candidateButtonActive: { borderColor: colors.primary, backgroundColor: "#E6F4F1" },
   candidateText: { color: colors.text, fontSize: 14, fontWeight: "700" },
   medicationDraftCard: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, gap: 9 },
+  nameConfirmButton: { flexDirection: "row", alignItems: "center", gap: 9, padding: 10, borderWidth: 1, borderColor: colors.border, borderRadius: 10 },
+  nameConfirmButtonActive: { borderColor: colors.primary, backgroundColor: colors.soft },
+  checkboxBox: { width: 22, height: 22, borderWidth: 1.5, borderColor: colors.muted, borderRadius: 5, alignItems: "center", justifyContent: "center" },
+  checkboxBoxActive: { borderColor: colors.primary, backgroundColor: colors.primary },
+  checkboxMark: { color: "#FFFFFF", fontSize: 15, fontWeight: "800" },
+  nameConfirmText: { flex: 1, color: colors.text, fontSize: 13, lineHeight: 19, fontWeight: "600" },
+  timeButton: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  timeButtonText: { color: colors.text, fontSize: 15, fontWeight: "700" },
+  timePlaceholder: { color: colors.muted, fontWeight: "400" },
+  timeButtonAction: { color: colors.primary, fontSize: 13, fontWeight: "700" },
+  timePickerOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.45)", justifyContent: "center", alignItems: "center", padding: 16 },
+  timePickerCard: { width: "100%", maxWidth: 420, maxHeight: "85%", backgroundColor: colors.surface, borderRadius: 18, padding: 16, gap: 12 },
+  timePickerColumns: { flexDirection: "row", gap: 12 },
+  timePickerColumn: { flex: 1, gap: 6 },
+  timePickerScroll: { height: 220, borderWidth: 1, borderColor: colors.border, borderRadius: 10 },
+  timePickerOptions: { padding: 6, gap: 4 },
+  timePickerOption: { minHeight: 36, alignItems: "center", justifyContent: "center", borderRadius: 7 },
+  timePickerOptionActive: { backgroundColor: colors.primary },
+  timePickerOptionText: { color: colors.text, fontSize: 16, fontWeight: "600" },
+  timePickerOptionTextActive: { color: "#FFFFFF" },
+  timePickerPreview: { textAlign: "center", color: colors.text, fontSize: 17, fontWeight: "800" },
+  timePickerAction: { flex: 1 },
+
   draftHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   removeText: { color: "#B42318", fontSize: 14, fontWeight: "700" },
   input: { minHeight: 46, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface, paddingHorizontal: 11, paddingVertical: 9, color: colors.text, fontSize: 15 },
