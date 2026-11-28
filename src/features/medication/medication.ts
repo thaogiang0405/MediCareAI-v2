@@ -12,12 +12,13 @@ import {
   serverTimestamp,
   where,
   writeBatch,
-  type Timestamp,
+  Timestamp,
   type Unsubscribe,
 } from "firebase/firestore";
 import { services } from "@/lib/firebase";
 import type { Profile } from "@/features/profile/profile";
 import { medicationValidationError, type MedicationDraft } from "./validation";
+import { buildDoses, doseTime, isScheduleMedication, shiftDate, vietnamDate, type Dose, type ScheduleMedication } from "./schedule";
 
 export type MedicationStatus = "active" | "inactive" | "deleted";
 export type MedicationRequestType = "create" | "update" | "stop" | "delete";
@@ -63,6 +64,11 @@ export type MedicationIntakeLogRecord = {
   ownerUid: string;
   medicationId: string;
   medicationName: string;
+  scheduledDate?: string;
+  scheduledTime?: string;
+  dosage?: string;
+  dosageUnit?: string;
+  strengthText?: string;
   recordedByUid: string;
   recordedByRole: "elderly" | "caregiver";
   takenAt: Timestamp | null;
@@ -220,6 +226,11 @@ function toIntakeLog(id: string, data: Record<string, unknown>): MedicationIntak
     ownerUid: typeof data.ownerUid === "string" ? data.ownerUid : "",
     medicationId: typeof data.medicationId === "string" ? data.medicationId : "",
     medicationName: typeof data.medicationName === "string" ? data.medicationName : "Thuốc",
+    scheduledDate: typeof data.scheduledDate === "string" ? data.scheduledDate : undefined,
+    scheduledTime: typeof data.scheduledTime === "string" ? data.scheduledTime : undefined,
+    dosage: typeof data.dosage === "string" ? data.dosage : undefined,
+    dosageUnit: typeof data.dosageUnit === "string" ? data.dosageUnit : undefined,
+    strengthText: typeof data.strengthText === "string" ? data.strengthText : undefined,
     recordedByUid: typeof data.recordedByUid === "string" ? data.recordedByUid : "",
     recordedByRole: data.recordedByRole === "caregiver" ? "caregiver" : "elderly",
     takenAt: (data.takenAt as Timestamp | undefined) ?? null,
@@ -691,4 +702,57 @@ export function medicationErrorMessage(error: unknown): string {
     default:
       return "Chưa thể xử lý dữ liệu thuốc. Vui lòng thử lại.";
   }
+}
+
+
+// Read only complete, explicit official medication data; never infer a missing dose or time.
+export function watchScheduleMedications(seniorUid: string, onValue: (items: ScheduleMedication[], incomplete: number) => void, onError: (error: Error) => void): Unsubscribe {
+  return onSnapshot(medicationCollection(seniorUid), { includeMetadataChanges: true }, snapshot => {
+    if (snapshot.metadata.hasPendingWrites) return;
+    if (snapshot.metadata.fromCache) { onError(new Error("unavailable")); return; }
+    const active = snapshot.docs.map(d => ({ ...d.data(), id: d.id }))
+      .filter(d => (d as Record<string, unknown>).status === "active" && (d as Record<string, unknown>).ownerUid === seniorUid);
+    const valid = active.filter(isScheduleMedication);
+    onValue(valid, active.length - valid.length);
+  }, onError);
+}
+
+export function watchDailyIntake(seniorUid: string, date: string, onValue: (items: MedicationIntakeLogRecord[]) => void, onError: (error: Error) => void): Unsubscribe {
+  const source = query(intakeCollection(seniorUid),
+    where("takenAt", ">=", Timestamp.fromMillis(doseTime(date, "00:00"))),
+    where("takenAt", "<", Timestamp.fromMillis(doseTime(shiftDate(date, 1), "00:00"))),
+    orderBy("takenAt", "desc"));
+  return onSnapshot(source, { includeMetadataChanges: true }, snapshot => {
+    if (snapshot.metadata.hasPendingWrites) return;
+    if (snapshot.metadata.fromCache) { onError(new Error("unavailable")); return; }
+    onValue(snapshot.docs.map(d => toIntakeLog(d.id, d.data())));
+  }, onError);
+}
+
+export async function confirmScheduledDose(user: User, profile: Profile, seniorUid: string, dose: Dose, note = ""): Promise<"created" | "already-confirmed"> {
+  assertIntakeRecorder(user, profile, seniorUid);
+  if (dose.medication.ownerUid !== seniorUid || dose.date !== vietnamDate()) throw new Error("dose-date");
+  const medRef = doc(medicationCollection(seniorUid), dose.medication.id);
+  const logRef = doc(intakeCollection(seniorUid), dose.id);
+  return runTransaction(database(), async tx => {
+    const existing = await tx.get(logRef);
+    if (existing.exists()) return "already-confirmed";
+    const latest = await tx.get(medRef);
+    const medication = { ...latest.data(), id: latest.id };
+    if (!latest.exists() || !isScheduleMedication(medication) || medication.ownerUid !== seniorUid
+      || !buildDoses([medication], dose.date).some(d => d.id === dose.id)
+      || medication.name !== dose.medication.name
+      || medication.strengthText !== dose.medication.strengthText
+      || medication.dosage !== dose.medication.dosage
+      || medication.dosageUnit !== dose.medication.dosageUnit
+      || medication.directionsText !== dose.medication.directionsText) throw new Error("dose-changed");
+    tx.set(logRef, {
+      ownerUid: seniorUid, medicationId: medication.id, medicationName: medication.name,
+      scheduledDate: dose.date, scheduledTime: dose.time,
+      dosage: medication.dosage, dosageUnit: medication.dosageUnit, strengthText: medication.strengthText,
+      recordedByUid: user.uid, recordedByRole: profile.role === "senior" ? "elderly" : "caregiver",
+      takenAt: serverTimestamp(), createdAt: serverTimestamp(), note: note.trim().slice(0, 300),
+    });
+    return "created";
+  });
 }

@@ -522,6 +522,41 @@ service cloud.firestore {
         );
     }
 
+    // Canonical one-document-per-dose key; no updates or deletes are ever allowed.
+    // Vietnam civil date is derived from the trusted server timestamp.
+    function hasValidScheduledIntake(uid, logId) {
+      let data = request.resource.data;
+      let m = get(/databases/$(database)/documents/elderlyProfiles/$(uid)/medications/$(data.medicationId)).data;
+      let today = request.time + duration.value(7, 'h');
+      return data.keys().hasAll([
+          'ownerUid', 'medicationId', 'medicationName', 'recordedByUid', 'recordedByRole',
+          'takenAt', 'note', 'createdAt', 'scheduledDate', 'scheduledTime', 'dosage', 'dosageUnit', 'strengthText'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid', 'medicationId', 'medicationName', 'recordedByUid', 'recordedByRole',
+          'takenAt', 'note', 'createdAt', 'scheduledDate', 'scheduledTime', 'dosage', 'dosageUnit', 'strengthText'
+        ])
+        && data.ownerUid == uid
+        && data.medicationId is string && data.medicationId.size() >= 1 && data.medicationId.size() <= 150
+        && hasValidMedicationScheduleDate(data.scheduledDate)
+        && hasValidMedicationTime(data.scheduledTime)
+        && logId == 'dose_' + data.scheduledDate + '_' + data.scheduledTime + '_' + data.medicationId
+        && int(data.scheduledDate.split('-')[0]) == today.year()
+        && int(data.scheduledDate.split('-')[1]) == today.month()
+        && int(data.scheduledDate.split('-')[2]) == today.day()
+        && m is map && m.ownerUid == uid && m.status == 'active'
+        && m.intakeTimes is list && data.scheduledTime in m.intakeTimes
+        && m.startDate is string && (m.startDate == '' || m.startDate <= data.scheduledDate)
+        && m.endDate is string && (m.endDate == '' || m.endDate >= data.scheduledDate)
+        && data.medicationName == m.name && data.dosage == m.dosage
+        && data.dosageUnit == m.dosageUnit && data.strengthText == m.strengthText
+        && data.recordedByUid == request.auth.uid
+        && data.takenAt == request.time && data.createdAt == request.time
+        && data.note is string && data.note.size() <= 300
+        && ((request.auth.uid == uid && hasValidElderlyProfile(uid) && data.recordedByRole == 'elderly')
+          || (hasActiveMedicationConnection(uid) && data.recordedByRole == 'caregiver'));
+    }
+
     function hasExactMedicationScheduleFields(data) {
       return data.keys().hasAll([
           'ownerUid',
@@ -1069,7 +1104,9 @@ service cloud.firestore {
     match /elderlyProfiles/{uid}/medicationIntakeLogs/{logId} {
       // Owner and active caregiver may read; either may append an immutable intake log.
       allow get, list: if hasValidElderlyProfile(uid) || hasActiveMedicationConnection(uid);
-      allow create: if hasValidMedicationIntakeLog(uid);
+      allow create: if logId.matches('^dose_.*')
+        ? hasValidScheduledIntake(uid, logId)
+        : hasValidMedicationIntakeLog(uid);
       allow update, delete: if false;
     }
 
