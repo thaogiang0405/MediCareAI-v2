@@ -179,7 +179,7 @@ export function parsePrescriptionText(text: string): PrescriptionParseResult {
   });
 
   if (medications.length === 0) {
-    warnings.push("Chưa tìm thấy dòng tên thuốc đủ rõ. Chỉ nhận diện dòng có hàm lượng hoặc nhãn Tên thuốc; không tự suy đoán tên.");
+    warnings.push("Chưa tìm thấy tên thuốc đủ rõ. Chỉ nhận diện dòng có hàm lượng, nhãn Tên thuốc hoặc dòng đánh số trong bảng thuốc có tiêu đề rõ ràng; không tự suy đoán tên.");
   }
   return { medications, sourceNameLines, warnings };
 }
