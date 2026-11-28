@@ -512,6 +512,41 @@ export async function createMedicationRequest(
   await batch.commit();
 }
 
+export async function createMedicationsFromPrescription(user: User, profile: Profile, seniorUid: string, drafts: MedicationDraft[]) {
+  assertSeniorOwner(user, profile, seniorUid);
+  if (!Array.isArray(drafts) || drafts.length < 1 || drafts.length > 10
+    || drafts.some(draft => medicationValidationError(draft) !== null)) throw new Error("invalid-request");
+  const batch = writeBatch(database());
+  for (const draft of drafts) {
+    const medicationRef = doc(medicationCollection(seniorUid));
+    batch.set(medicationRef, {
+      ...draft, ownerUid: seniorUid, createdByUid: user.uid, updatedByUid: user.uid,
+      status: "active", deletedAt: null, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), revision: 1,
+    });
+  }
+  await batch.commit();
+}
+
+export async function createMedicationRequestsFromPrescription(user: User, profile: Profile, seniorUid: string, drafts: MedicationDraft[]) {
+  assertCaregiver(user, profile, seniorUid);
+  if (!Array.isArray(drafts) || drafts.length < 1 || drafts.length > 10
+    || drafts.some(draft => medicationValidationError(draft) !== null)) throw new Error("invalid-request");
+  const batch = writeBatch(database());
+  for (const draft of drafts) {
+    const requestRef = doc(requestCollection(seniorUid));
+    const notificationRef = doc(notificationCollection(seniorUid));
+    const medicationName = draft.name.trim().slice(0, 120);
+    batch.set(requestRef, {
+      ownerUid: seniorUid, medicationId: null, medicationName, requestType: "create", proposedData: draft,
+      requestedByUid: user.uid, reason: "Đề xuất thêm thuốc từ kết quả OCR đơn thuốc.",
+      status: "pending", createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+      reviewedByUid: null, reviewedAt: null, reviewNote: "",
+    });
+    batch.set(notificationRef, notificationData(seniorUid, profile, "proposal_submitted", null, medicationName, requestRef.id, "create"));
+  }
+  await batch.commit();
+}
+
 export async function reviewMedicationRequest(
   user: User,
   profile: Profile,

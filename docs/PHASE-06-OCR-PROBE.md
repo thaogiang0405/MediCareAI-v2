@@ -1,36 +1,28 @@
-# Phase 06 — OCR feasibility gate
+# Phase 06 — Prescription OCR and medication import
 
-Status: prototype iteration 2 (image normalization and multi-pass OCR). This is still a test-only screen: it does not create or update medication records and does not change Firebase or Firestore Rules.
+Current scope: OCR image test, local text parsing, human review, and role-checked medication creation/proposals. No prescription image is uploaded or stored yet. No Firebase Rules or Storage configuration changes are included.
 
-## OCR pipeline
+## Current workflow
 
-- Expo SDK 58 remains unchanged.
-- `expo-image-picker` captures or selects one image.
-- `expo-image-manipulator` normalizes the selected image to JPEG, downsizes to at most 2000 × 2800 px, and exports a high-quality Base64 payload for the isolated WebView.
-- Tesseract.js 6.0.1 runs locally in the WebView with Vietnamese and English language data (`vie+eng`).
-- The WebView creates four candidates: original image / PSM 3, contrast-stretched grayscale / PSM 6, shadow-corrected grayscale / PSM 4, and Otsu-binarized image / PSM 11.
-- Candidates are shown separately and ordered by Tesseract confidence. Confidence is an engine score, not a probability that a medicine name, strength, dosage, or time is correct. No drug names, numbers, doses, or times are automatically corrected.
-- This prototype still downloads the OCR runtime and language data from pinned CDN URLs. It is not approved for real or identifiable prescriptions. Test only with fabricated or fully anonymized images.
+1. The user captures or selects a fabricated/fully anonymized prescription image.
+2. ImageManipulator normalizes the image to JPEG at up to 2000 × 2800 px.
+3. Tesseract.js 6.0.1 in WebView runs four local OCR passes (PSM 3, 6, 4, 11) using Vietnamese and English trained data.
+4. The user chooses an OCR candidate and asks the local parser to split medicine entries.
+5. The parser extracts only explicit name/strength, dosage, frequency, exact HH:mm times, and directions. It does not correct malformed OCR strings, infer missing dosage, or invent times.
+6. Every parsed medicine is displayed in an editable review card. Required values must pass existing Phase 04 medication validation before submission.
+7. Senior accounts create official medication records in one Firestore batch. Caregiver accounts create pending create-proposals and notification records in one Firestore batch; the senior must approve them.
 
-## iPhone test plan
+## Limits and safety
 
-1. Run the built-in synthetic sample.
-2. Select the same anonymous sample image from Photos and compare all four candidates.
-3. Capture the same sample using the iPhone camera and compare all four candidates.
-4. Record which candidate has the best exact reading of names, strengths, dosage, and times. Do not accept a result merely because its confidence score is high.
-5. Test cancel, retry, camera permission denied, a large image, and an image with shadows.
-6. Run `npm run typecheck`, `npm run lint`, `npm test`, and `npm run doctor` locally. Physical iPhone verification remains required.
+- Parser is deterministic and heuristic, not a clinical decision system. OCR text can be wrong. User review against the source prescription remains mandatory.
+- Frequency, dosage, and exact times that cannot be read remain incomplete and block saving until the user enters them.
+- The OCR runtime and language data are still downloaded from pinned CDN URLs. This test build must use fabricated or fully anonymized documents only.
+- The original image remains temporary in app memory/cache and is not saved to Firestore or Storage.
+- Do not store image Base64 in Firestore. A later image-retention phase must decide between a local-only attachment (not shared across devices) and a secure object-storage service with explicit cost, privacy, access, retention, and deletion approval. Firebase Storage on Blaze must not be enabled without separate user approval.
+- Existing role boundaries remain: only a senior writes the official medication list; caregivers submit proposals for senior review.
+- Medication writes use existing medication schema and Phase 04 validation. No Firestore Rules or staging deployment changes are part of this commit.
 
-## Medication and image retention boundary
+## Tests
 
-- The OCR screen does not save medication data or images to Firebase.
-- A future medication-entry workflow may attach the original captured prescription image to the medication record, with explicit user confirmation and a secure owner-scoped access model.
-- Do not store Base64 image data inside a Firestore medication document. Firestore documents have a 1 MiB size limit, and embedding images would inflate reads/writes and complicate privacy and retention.
-- The current project constraint is zero budget / Firebase Spark and explicitly excludes Firebase Storage and Blaze. Cloud Storage for Firebase requires the Blaze plan; do not enable billing or create a bucket without the owner's separate approval.
-- If the project remains on Spark, a future local-only attachment can be considered, but it will not sync to caregivers or other devices and may be lost when app data is removed. If cross-device sharing is required, first obtain approval for an appropriate secure object-storage service and its billing, access rules, retention, and deletion design.
-- The final workflow must reuse the role-checked Phase 04 medication write operations. Caregivers must continue to submit proposals rather than writing directly to the senior's medication record.
-- Never infer a missing dosage or schedule. The senior must review and confirm every recognized field before saving.
-
-## Acceptance gate
-
-Do not merge Phase 06 until the iPhone camera and photo-library tests are repeatable, OCR errors are visibly reviewable, medication entry is integrated with the existing authorization model, and typecheck/lint/tests/Expo Doctor have passed.
+- Parser unit tests cover two medicine blocks, strict HH:mm recognition, missing frequency, and excluding strength-like numbers from notes.
+- On-device OCR, Firestore staging, and iPhone end-to-end tests still require manual verification.

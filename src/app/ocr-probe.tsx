@@ -1,11 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import { WebView } from "react-native-webview";
 import { colors } from "@/theme";
+import { useAuth } from "@/features/auth/AuthProvider";
+import {
+  createMedicationRequestsFromPrescription, createMedicationsFromPrescription, medicationErrorMessage,
+} from "@/features/medication/medication";
+import {
+  MEDICATION_FORMS, medicationValidationError, normalizeMedicationDraft,
+  type MedicationDraft, type MedicationForm,
+} from "@/features/medication/validation";
+import { parsePrescriptionText } from "@/features/medication/prescriptionParser";
 
 type SelectedImage = { uri: string; base64: string; width: number; height: number; source: "camera" | "library" };
 type Job = { image: string | null; width: number; height: number; source: "camera" | "library" | "sample"; started: number };
@@ -46,8 +55,17 @@ function stageLabel(status: unknown) {
   }
 }
 
+function emptyDraft(): MedicationDraft {
+  return { name: "", strengthText: "", dosage: "", dosageUnit: "", dosageForm: "other",
+    frequency: 0, intakeTimes: [], directionsText: "", startDate: "", endDate: "", notes: "" };
+}
+
 export default function OcrProbe() {
   const router = useRouter();
+  const params = useLocalSearchParams<{ seniorUid?: string }>();
+  const { user, profile } = useAuth();
+  const seniorUid = profile?.role === "senior" ? user?.uid ?? "" : (typeof params.seniorUid === "string" ? params.seniorUid : "");
+  const family = profile?.role === "family";
   const [selected, setSelected] = useState<SelectedImage | null>(null);
   const [job, setJob] = useState<Job | null>(null);
   const [picking, setPicking] = useState(false);
@@ -56,11 +74,16 @@ export default function OcrProbe() {
   const [progress, setProgress] = useState<number | null>(null);
   const [candidates, setCandidates] = useState<OcrCandidate[]>([]);
   const [selectedCandidateIndex, setSelectedCandidateIndex] = useState(0);
+  const [drafts, setDrafts] = useState<MedicationDraft[]>([]);
+  const [parseWarnings, setParseWarnings] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [elapsed, setElapsed] = useState<number | null>(null);
   const [processedSize, setProcessedSize] = useState<{ width: number; height: number } | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const source = useMemo(() => job ? { html: probeHtml(job.image), baseUrl: "https://localhost/" } : null, [job]);
   const selectedCandidate = candidates[selectedCandidateIndex] ?? candidates[0] ?? null;
+  const canSave = drafts.length > 0 && drafts.every(draft => medicationValidationError(draft) === null);
 
   useEffect(() => {
     if (!job) return;
@@ -70,6 +93,7 @@ export default function OcrProbe() {
 
   function resetResult() {
     setError(""); setCandidates([]); setSelectedCandidateIndex(0); setElapsed(null); setProgress(null); setProcessedSize(null);
+    setDrafts([]); setParseWarnings([]); setSaveError("");
   }
 
   async function pick(camera: boolean) {
@@ -108,24 +132,92 @@ export default function OcrProbe() {
 
   function fail() { setJob(null); setError("Không thể nhận diện ảnh. Hãy kiểm tra kết nối mạng và thử lại."); }
 
+  function analyzeSelectedText() {
+    if (!selectedCandidate?.text.trim()) {
+      Alert.alert("Phân tích đơn thuốc", "Chưa có văn bản OCR để phân tích.");
+      return;
+    }
+    const parsed = parsePrescriptionText(selectedCandidate.text);
+    setDrafts(parsed.medications); setParseWarnings(parsed.warnings); setSaveError("");
+    if (parsed.medications.length === 0) Alert.alert("Chưa tìm thấy thuốc", parsed.warnings.join("\n"));
+  }
+
+  function updateDraft(index: number, changes: Partial<MedicationDraft>) {
+    setDrafts(current => current.map((draft, itemIndex) => itemIndex === index ? { ...draft, ...changes } : draft));
+  }
+
+  function changeFrequency(index: number, value: string) {
+    if (!/^\d*$/.test(value)) return;
+    const count = value === "" ? 0 : Number(value);
+    if (count > 6) return;
+    setDrafts(current => current.map((draft, itemIndex) => itemIndex === index
+      ? { ...draft, frequency: count, intakeTimes: count > 0
+        ? Array.from({ length: count }, (_, timeIndex) => draft.intakeTimes[timeIndex] ?? "")
+        : draft.intakeTimes }
+      : draft));
+  }
+
+  function addTime(index: number) {
+    setDrafts(current => current.map((draft, itemIndex) => {
+      if (itemIndex !== index || draft.intakeTimes.length >= 6) return draft;
+      const intakeTimes = [...draft.intakeTimes, ""];
+      return { ...draft, intakeTimes, frequency: draft.frequency > 0 ? intakeTimes.length : 0 };
+    }));
+  }
+
+  function updateTime(index: number, timeIndex: number, value: string) {
+    setDrafts(current => current.map((draft, itemIndex) => itemIndex === index
+      ? { ...draft, intakeTimes: draft.intakeTimes.map((time, currentIndex) => currentIndex === timeIndex ? value : time) }
+      : draft));
+  }
+
+  function addManualDraft() {
+    if (drafts.length < 10) setDrafts(current => [...current, emptyDraft()]);
+  }
+
+  async function saveReviewedDrafts() {
+    if (saving || !canSave || !user || !profile || !seniorUid) {
+      Alert.alert("Chưa thể lưu", "Hãy kiểm tra đầy đủ tên thuốc, liều lượng, đơn vị, số lần/ngày và từng giờ uống trước khi tiếp tục.");
+      return;
+    }
+    setSaving(true); setSaveError("");
+    try {
+      const normalized = drafts.map(normalizeMedicationDraft);
+      if (family) await createMedicationRequestsFromPrescription(user, profile, seniorUid, normalized);
+      else if (profile.role === "senior") await createMedicationsFromPrescription(user, profile, seniorUid, normalized);
+      else throw new Error("wrong-role");
+      const message = family
+        ? "Đã gửi " + normalized.length + " đề xuất thuốc. Người cao tuổi phải duyệt trước khi thuốc được thêm chính thức."
+        : "Đã thêm " + normalized.length + " loại thuốc vào danh sách quản lý thuốc.";
+      Alert.alert("Nhập thuốc từ đơn thuốc", message, [{ text: "Đóng", onPress: () => router.back() }]);
+    } catch (cause) {
+      setSaveError(medicationErrorMessage(cause));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <SafeAreaView style={styles.safe} edges={["top", "bottom"]}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Pressable accessibilityRole="button" style={styles.secondary} onPress={() => router.back()}><Text style={styles.secondaryText}>‹ Quay lại</Text></Pressable>
-        <Text style={styles.title}>Thử nghiệm OCR</Text>
-        <Text style={styles.warning}>Chỉ dùng ảnh đơn thuốc giả lập hoặc đã ẩn danh hoàn toàn. Bản thử nghiệm tải bộ OCR từ Internet, chưa xử lý đơn thuốc thật và không lưu vào Firebase.</Text>
-        {selected ? <Image source={{ uri: selected.uri }} style={styles.preview} resizeMode="contain" /> :
-          <View style={styles.empty}><Text style={styles.body}>Ảnh mẫu tích hợp có hai loại thuốc giả lập. Bạn cũng có thể chụp ảnh hoặc chọn ảnh từ thư viện.</Text></View>}
+        <Text style={styles.title}>Nhập thuốc từ ảnh đơn thuốc</Text>
+        <Text style={styles.warning}>Bản thử nghiệm tải bộ OCR từ Internet. Chỉ dùng ảnh giả lập hoặc đã ẩn danh hoàn toàn. Ảnh đơn thuốc chưa được lưu. Mọi thông tin phải được kiểm tra thủ công trước khi xác nhận.</Text>
+        {!user || !profile || !seniorUid
+          ? <Text style={styles.warning}>Không xác định được hồ sơ người cao tuổi. Hãy quay lại Quản lý thuốc và mở chức năng này từ hồ sơ cần nhập.</Text>
+          : <Text style={styles.muted}>{family ? "Kết quả sẽ được gửi thành đề xuất để người cao tuổi duyệt." : "Bạn đang nhập thuốc vào hồ sơ của chính mình."}</Text>}
+        {selected ? <Image source={{ uri: selected.uri }} style={styles.preview} resizeMode="contain" />
+          : <View style={styles.empty}><Text style={styles.body}>Chụp ảnh hoặc chọn ảnh đơn thuốc để nhận diện nhiều loại thuốc.</Text></View>}
         <View style={styles.row}>
-          <Pressable accessibilityRole="button" disabled={!!job || picking} style={styles.secondary} onPress={() => void pick(true)}><Text style={styles.secondaryText}>{picking ? "Đang chuẩn hóa ảnh..." : "Chụp ảnh"}</Text></Pressable>
-          <Pressable accessibilityRole="button" disabled={!!job || picking} style={styles.secondary} onPress={() => void pick(false)}><Text style={styles.secondaryText}>Chọn ảnh</Text></Pressable>
+          <Pressable accessibilityRole="button" disabled={!!job || picking || saving} style={styles.secondary} onPress={() => void pick(true)}><Text style={styles.secondaryText}>{picking ? "Đang chuẩn hóa ảnh..." : "Chụp ảnh"}</Text></Pressable>
+          <Pressable accessibilityRole="button" disabled={!!job || picking || saving} style={styles.secondary} onPress={() => void pick(false)}><Text style={styles.secondaryText}>Chọn ảnh</Text></Pressable>
         </View>
         {selected && !job && <View style={styles.meta}>
           <Text style={styles.body}>Nguồn: {selected.source === "camera" ? "Camera iPhone" : "Thư viện ảnh"}</Text>
           <Text style={styles.muted}>Ảnh đã chuẩn hóa: {selected.width} × {selected.height} px</Text>
-          <Pressable style={styles.secondary} onPress={() => { setSelected(null); resetResult(); }}><Text style={styles.secondaryText}>Dùng ảnh mẫu tích hợp</Text></Pressable>
+          <Pressable style={styles.secondary} disabled={saving} onPress={() => { setSelected(null); resetResult(); }}><Text style={styles.secondaryText}>Chọn ảnh khác</Text></Pressable>
         </View>}
-        {!job && <Pressable accessibilityRole="button" disabled={picking} style={styles.primary} onPress={start}><Text style={styles.primaryText}>Bắt đầu nhận diện (4 lượt)</Text></Pressable>}
+        {!job && <Pressable accessibilityRole="button" disabled={picking || saving} style={styles.primary} onPress={start}><Text style={styles.primaryText}>Bắt đầu nhận diện (4 lượt)</Text></Pressable>}
         {job && source && <>
           <ActivityIndicator color={colors.primary} />
           <Text style={styles.body}>{status}{progress !== null ? " · " + progress + "%" : ""}</Text>
@@ -152,7 +244,7 @@ export default function OcrProbe() {
                   }).slice(0, 4);
                   setElapsed((Date.now() - job.started) / 1000);
                   setProcessedSize({ width: Number(message.width) || job.width, height: Number(message.height) || job.height });
-                  setCandidates(next); setSelectedCandidateIndex(0); setJob(null);
+                  setCandidates(next); setSelectedCandidateIndex(0); setDrafts([]); setParseWarnings([]); setJob(null);
                 } else if (message.type === "error") fail();
               } catch { fail(); }
             }}
@@ -161,20 +253,73 @@ export default function OcrProbe() {
         {!!error && <Text accessibilityRole="alert" style={styles.warning}>{error}</Text>}
         {candidates.length > 0 && <View style={styles.empty}>
           <Text style={styles.heading}>Các kết quả OCR để đối chiếu</Text>
-          <Text style={styles.muted}>Đã chạy 4 cách xử lý. Độ tin cậy là chỉ số kỹ thuật của Tesseract, không phải xác suất thuốc được nhận diện đúng.</Text>
+          <Text style={styles.muted}>Độ tin cậy là chỉ số kỹ thuật của Tesseract, không phải xác suất thuốc được nhận diện đúng.</Text>
           <View style={styles.candidateList}>
             {candidates.map((candidate, index) => <Pressable key={candidate.id} accessibilityRole="button"
               style={[styles.candidateButton, selectedCandidateIndex === index && styles.candidateButtonActive]}
-              onPress={() => setSelectedCandidateIndex(index)}>
+              onPress={() => { setSelectedCandidateIndex(index); setDrafts([]); setParseWarnings([]); }}>
               <Text style={styles.candidateText}>Kết quả {index + 1}</Text><Text style={styles.muted}>{candidate.confidence}%</Text>
             </Pressable>)}
           </View>
           {selectedCandidate && <>
             <Text style={styles.heading}>{selectedCandidate.label}</Text>
             <Text style={styles.body}>Thời gian: {elapsed?.toFixed(1)} giây</Text>
-            <Text style={styles.muted}>Ảnh xử lý: {processedSize?.width} × {processedSize?.height} px</Text>
             <Text selectable style={styles.body}>{selectedCandidate.text.trim() || "Không nhận diện được chữ."}</Text>
+            <Pressable accessibilityRole="button" style={styles.primary} onPress={analyzeSelectedText}><Text style={styles.primaryText}>Phân tích thành danh sách thuốc</Text></Pressable>
           </>}
+        </View>}
+        {drafts.length > 0 && <View style={styles.empty}>
+          <Text style={styles.heading}>Kiểm tra {drafts.length} mục thuốc</Text>
+          <Text style={styles.warning}>OCR chỉ gợi ý nội dung. Hãy đối chiếu với đơn thuốc gốc hoặc người kê đơn. Trường chưa nhận diện được phải tự nhập; ứng dụng không tự điền liều hoặc giờ.</Text>
+          {parseWarnings.map((warning, index) => <Text key={index} style={styles.warning}>{warning}</Text>)}
+          {drafts.map((draft, index) => {
+            const validation = medicationValidationError(draft);
+            return <View key={index} style={styles.medicationDraftCard}>
+              <View style={styles.draftHeader}>
+                <Text style={styles.heading}>Thuốc {index + 1}</Text>
+                <Pressable accessibilityRole="button" disabled={saving} onPress={() => setDrafts(current => current.filter((_, itemIndex) => itemIndex !== index))}><Text style={styles.removeText}>Bỏ mục này</Text></Pressable>
+              </View>
+              <Text style={styles.fieldLabel}>Tên thuốc *</Text>
+              <TextInput value={draft.name} onChangeText={value => updateDraft(index, { name: value })} style={styles.input} placeholder="Tên thuốc" />
+              <Text style={styles.fieldLabel}>Hàm lượng</Text>
+              <TextInput value={draft.strengthText} onChangeText={value => updateDraft(index, { strengthText: value })} style={styles.input} placeholder="Ví dụ: 500 mg" />
+              <View style={styles.row}>
+                <View style={styles.half}>
+                  <Text style={styles.fieldLabel}>Liều lượng *</Text>
+                  <TextInput value={draft.dosage} onChangeText={value => updateDraft(index, { dosage: value })} style={styles.input} placeholder="Ví dụ: 1" />
+                </View>
+                <View style={styles.half}>
+                  <Text style={styles.fieldLabel}>Đơn vị *</Text>
+                  <TextInput value={draft.dosageUnit} onChangeText={value => updateDraft(index, { dosageUnit: value })} style={styles.input} placeholder="viên, ml, gói..." />
+                </View>
+              </View>
+              <Text style={styles.fieldLabel}>Dạng thuốc</Text>
+              <View style={styles.formChoices}>
+                {MEDICATION_FORMS.map(form => <Pressable key={form.value} disabled={saving} onPress={() => updateDraft(index, { dosageForm: form.value as MedicationForm })} style={[styles.choice, draft.dosageForm === form.value && styles.choiceActive]}>
+                  <Text style={[styles.choiceText, draft.dosageForm === form.value && styles.choiceTextActive]}>{form.label}</Text>
+                </Pressable>)}
+              </View>
+              <Text style={styles.fieldLabel}>Số lần sử dụng trong ngày *</Text>
+              <TextInput value={draft.frequency > 0 ? String(draft.frequency) : ""} onChangeText={value => changeFrequency(index, value)} style={styles.input} placeholder="Nhập số lần/ngày (1–6)" keyboardType="number-pad" />
+              {draft.intakeTimes.map((time, timeIndex) => <View key={timeIndex} style={styles.field}>
+                <Text style={styles.fieldLabel}>Giờ uống lần {timeIndex + 1} *</Text>
+                <TextInput value={time} onChangeText={value => updateTime(index, timeIndex, value)} style={styles.input} placeholder="HH:mm, ví dụ 08:00" />
+              </View>)}
+              <Pressable accessibilityRole="button" disabled={saving || draft.intakeTimes.length >= 6} style={styles.secondary} onPress={() => addTime(index)}><Text style={styles.secondaryText}>＋ Thêm khung giờ</Text></Pressable>
+              <Text style={styles.fieldLabel}>Hướng dẫn sử dụng</Text>
+              <TextInput value={draft.directionsText} onChangeText={value => updateDraft(index, { directionsText: value })} style={[styles.input, styles.multiline]} multiline placeholder="Ví dụ: sau ăn" />
+              {!!validation && <Text style={styles.error}>{validation}</Text>}
+            </View>;
+          })}
+          <Pressable accessibilityRole="button" disabled={saving || drafts.length >= 10} style={styles.secondary} onPress={addManualDraft}><Text style={styles.secondaryText}>＋ Thêm thuốc thủ công</Text></Pressable>
+          {!!saveError && <Text accessibilityRole="alert" style={styles.error}>{saveError}</Text>}
+          <Text style={styles.muted}>{family
+            ? "Khi gửi, mỗi thuốc sẽ thành một đề xuất riêng. Người cao tuổi phải duyệt trước khi thuốc được thêm chính thức."
+            : "Khi lưu, tất cả mục thuốc hợp lệ sẽ được thêm cùng một giao dịch. Bạn cần kiểm tra từng trường trước khi xác nhận."}</Text>
+          <Pressable accessibilityRole="button" disabled={saving || !canSave || !user || !profile || !seniorUid} style={[styles.primary, (saving || !canSave) && styles.disabled]} onPress={() => void saveReviewedDrafts()}>
+            {saving ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.primaryText}>{family ? "Gửi đề xuất thuốc" : "Xác nhận và thêm thuốc"}</Text>}
+          </Pressable>
+          {!canSave && <Text style={styles.muted}>Chưa thể lưu: hãy hoàn thiện các trường bắt buộc và giờ uống theo định dạng HH:mm.</Text>}
         </View>}
       </ScrollView>
     </SafeAreaView>
@@ -189,17 +334,32 @@ const styles = StyleSheet.create({
   body: { fontSize: 16, lineHeight: 24, color: colors.text },
   muted: { fontSize: 14, lineHeight: 20, color: colors.muted },
   warning: { fontSize: 15, lineHeight: 22, color: "#854D0E", backgroundColor: "#FEF3C7", padding: 12, borderRadius: 10 },
+  error: { fontSize: 14, lineHeight: 20, color: "#B42318", backgroundColor: "#FEE4E2", padding: 10, borderRadius: 9 },
   row: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  half: { flex: 1, minWidth: 120, gap: 4 },
+  field: { gap: 4 },
+  fieldLabel: { fontSize: 14, fontWeight: "700", color: colors.text },
   meta: { gap: 8 },
-  secondary: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, minHeight: 48, justifyContent: "center", alignItems: "center" },
+  secondary: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: 14, minHeight: 46, justifyContent: "center", alignItems: "center" },
   secondaryText: { fontSize: 15, color: colors.primary, fontWeight: "700" },
-  primary: { backgroundColor: colors.primary, borderRadius: 12, minHeight: 52, alignItems: "center", justifyContent: "center", padding: 12 },
-  primaryText: { color: "white", fontSize: 16, fontWeight: "700" },
+  primary: { backgroundColor: colors.primary, borderRadius: 12, minHeight: 50, alignItems: "center", justifyContent: "center", padding: 12 },
+  primaryText: { color: "white", fontSize: 16, fontWeight: "700", textAlign: "center" },
   preview: { width: "100%", height: 240, backgroundColor: "white", borderRadius: 10 },
   empty: { backgroundColor: "white", borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 14, gap: 10 },
   candidateList: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   candidateButton: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, minHeight: 46, paddingHorizontal: 12, justifyContent: "center", gap: 2 },
   candidateButtonActive: { borderColor: colors.primary, backgroundColor: "#E6F4F1" },
   candidateText: { color: colors.text, fontSize: 14, fontWeight: "700" },
-  web: { height: 260, backgroundColor: "white", flex: 0 }
+  medicationDraftCard: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 12, gap: 9 },
+  draftHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  removeText: { color: "#B42318", fontSize: 14, fontWeight: "700" },
+  input: { minHeight: 46, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface, paddingHorizontal: 11, paddingVertical: 9, color: colors.text, fontSize: 15 },
+  multiline: { minHeight: 76, textAlignVertical: "top" },
+  formChoices: { flexDirection: "row", flexWrap: "wrap", gap: 7 },
+  choice: { borderWidth: 1, borderColor: colors.border, borderRadius: 99, paddingVertical: 7, paddingHorizontal: 10 },
+  choiceActive: { borderColor: colors.primary, backgroundColor: colors.soft },
+  choiceText: { color: colors.muted, fontSize: 12, fontWeight: "600" },
+  choiceTextActive: { color: colors.primaryDark },
+  disabled: { opacity: 0.45 },
+  web: { height: 260, backgroundColor: "white", flex: 0 },
 });
