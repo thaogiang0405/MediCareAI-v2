@@ -1,0 +1,68 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isElderlyOwner(uid) {
+      let profile = firestore.get(/databases/(default)/documents/users/$(uid)).data;
+      return signedIn()
+        && request.auth.uid == uid
+        && profile is map
+        && profile.uid == uid
+        && profile.primaryRole == 'elderly'
+        && profile.onboardingCompleted == true;
+    }
+
+    function isConnectedCaregiver(uid) {
+      let pair = firestore.get(/databases/(default)/documents/connectionPairs/$(request.auth.uid)/seniors/$(uid)).data;
+      // The pair is created only by the elderly owner after Firestore validates
+      // the caregiver role and both participants. Disconnect updates this pair
+      // atomically, so it is the authoritative Storage access check.
+      return signedIn()
+        && request.auth.uid != uid
+        && pair is map
+        && pair.status == 'connected'
+        && pair.connectionId is string;
+    }
+
+    function hasActivePrescriptionRecord(uid, prescriptionId) {
+      let record = firestore.get(/databases/(default)/documents/elderlyProfiles/$(uid)/prescriptions/$(prescriptionId)).data;
+      return record is map
+        && record.ownerUid == uid
+        && record.status == 'active'
+        && record.storagePath == 'elderlyProfiles/' + uid + '/prescriptions/' + prescriptionId + '/original.jpg';
+    }
+
+    match /elderlyProfiles/{uid}/prescriptions/{prescriptionId}/original.jpg {
+      // Reads require both a current relationship and an active Firestore record.
+      // No long-lived download URL is stored in Firestore or returned by the app.
+      allow read: if hasActivePrescriptionRecord(uid, prescriptionId)
+        && (isElderlyOwner(uid) || isConnectedCaregiver(uid));
+
+      // One immutable, normalized JPEG per prescription. The caller must be
+      // the owner or a currently connected caregiver for this elderly profile.
+      allow create: if (isElderlyOwner(uid) || isConnectedCaregiver(uid))
+        && request.resource.size > 0
+        && request.resource.size <= 8388608
+        && request.resource.contentType == 'image/jpeg'
+        && request.resource.metadata.ownerUid == uid
+        && request.resource.metadata.uploadedByUid == request.auth.uid
+        && request.resource.metadata.prescriptionId == prescriptionId
+        && request.resource.metadata.source in ['camera', 'library'];
+
+      allow update: if false;
+
+      // A failed Firestore batch may clean up its unlinked upload. Once the
+      // metadata record exists, client-side deletion is denied.
+      allow delete: if (isElderlyOwner(uid)
+          || (isConnectedCaregiver(uid) && resource.metadata.uploadedByUid == request.auth.uid))
+        && !firestore.exists(/databases/(default)/documents/elderlyProfiles/$(uid)/prescriptions/$(prescriptionId));
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

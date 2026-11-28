@@ -212,6 +212,50 @@ service cloud.firestore {
       return hasValidElderlyProfile(uid) || hasActiveMedicationConnection(uid);
     }
 
+    function isValidPrescriptionCreate(uid, prescriptionId) {
+      let data = request.resource.data;
+      return (hasValidElderlyProfile(uid) || hasActiveMedicationConnection(uid))
+        && data.keys().hasAll([
+          'ownerUid', 'storagePath', 'contentType', 'sizeBytes',
+          'uploadedByUid', 'uploadedByRole', 'source', 'width', 'height',
+          'linkedMedicationIds', 'linkedRequestIds', 'createdAt', 'status'
+        ])
+        && data.keys().hasOnly([
+          'ownerUid', 'storagePath', 'contentType', 'sizeBytes',
+          'uploadedByUid', 'uploadedByRole', 'source', 'width', 'height',
+          'linkedMedicationIds', 'linkedRequestIds', 'createdAt', 'status'
+        ])
+        && data.ownerUid == uid
+        && data.storagePath == 'elderlyProfiles/' + uid + '/prescriptions/' + prescriptionId + '/original.jpg'
+        && data.contentType == 'image/jpeg'
+        && data.sizeBytes is int && data.sizeBytes > 0 && data.sizeBytes <= 8388608
+        && data.uploadedByUid == request.auth.uid
+        && data.source is string && data.source in ['camera', 'library']
+        && data.width is int && data.width >= 1 && data.width <= 2800
+        && data.height is int && data.height >= 1 && data.height <= 2800
+        && data.linkedMedicationIds is list && data.linkedMedicationIds.size() <= 10
+        && data.linkedMedicationIds.toSet().size() == data.linkedMedicationIds.size()
+        && data.linkedRequestIds is list && data.linkedRequestIds.size() <= 10
+        && data.linkedRequestIds.toSet().size() == data.linkedRequestIds.size()
+        && data.createdAt == request.time
+        && data.status == 'active'
+        && (
+          (
+            hasValidElderlyProfile(uid)
+            && data.uploadedByRole == 'elderly'
+            && data.uploadedByUid == uid
+            && data.linkedMedicationIds.size() >= 1
+            && data.linkedRequestIds.size() == 0
+          )
+          || (
+            hasActiveMedicationConnection(uid)
+            && data.uploadedByRole == 'caregiver'
+            && data.linkedMedicationIds.size() == 0
+            && data.linkedRequestIds.size() >= 1
+          )
+        );
+    }
+
     function isValidMedicationCreate(uid) {
       // Only the elderly owner can directly change the official medication list.
       return hasValidElderlyProfile(uid)
@@ -1071,6 +1115,16 @@ service cloud.firestore {
     // M3.2: an elderly owner may access only their own medication records.
     // A profile role from the UI never grants access; the canonical M2.3
     // `/users/{uid}` document is checked for every operation.
+    match /elderlyProfiles/{uid}/prescriptions/{prescriptionId} {
+      // Prescription photos belong to the elderly profile. The owner and every
+      // currently connected caregiver may read; uploads are immutable.
+      allow get, list: if canAccessMedicationProfile(uid)
+        && resource.data.ownerUid == uid
+        && resource.data.status == 'active';
+      allow create: if isValidPrescriptionCreate(uid, prescriptionId);
+      allow update, delete: if false;
+    }
+
     match /elderlyProfiles/{uid}/medications/{medicationId} {
       // Both the owner and a connected caregiver may read; only the owner writes.
       allow get, list: if canAccessMedicationProfile(uid);

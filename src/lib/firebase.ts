@@ -2,11 +2,12 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { getApps, initializeApp } from "firebase/app";
 import * as AuthSDK from "firebase/auth";
 import { connectFirestoreEmulator, getFirestore } from "firebase/firestore";
+import { connectStorageEmulator, getStorage, type FirebaseStorage } from "firebase/storage";
 import type { Auth, Persistence } from "firebase/auth";
 import type { Firestore } from "firebase/firestore";
 import { Platform } from "react-native";
 
-type Services = { auth: Auth; db: Firestore };
+type Services = { auth: Auth; db: Firestore; storage: FirebaseStorage | null };
 type Mode = "emulator" | "staging";
 type ServiceCache = Partial<Record<Mode, Services>>;
 const cache = globalThis as typeof globalThis & { __medicareFirebaseServices?: ServiceCache };
@@ -63,6 +64,7 @@ function initialize(): Services {
       authDomain: "demo-medicare-ai.firebaseapp.com",
       projectId: "demo-medicare-ai",
       appId: "1:123:web:demo",
+      storageBucket: "demo-medicare-ai.appspot.com",
     };
   } else {
     const projectId = process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID?.trim() ?? "";
@@ -86,13 +88,15 @@ function initialize(): Services {
   const app = getApps().find(item => item.name === appName) ?? initializeApp(config, appName);
   const auth = createAuth(app);
   const db = getFirestore(app);
+  const storage = config.storageBucket ? getStorage(app) : null;
 
   if (mode === "emulator") {
     AuthSDK.connectAuthEmulator(auth, `http://${host}:9099`);
     connectFirestoreEmulator(db, host, 8080);
+    if (storage) connectStorageEmulator(storage, host, 9199);
   }
 
-  const services = { auth, db };
+  const services = { auth, db, storage };
   cache.__medicareFirebaseServices[mode] = services;
   return services;
 }
