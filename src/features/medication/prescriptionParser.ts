@@ -59,7 +59,7 @@ function extractDirections(lines: string[]): string {
     if (!/(huong dan|dung luc|uong luc|sau an|truoc an|truoc khi ngu|sau bua|lac deu|sau khi an|truoc bua)/.test(normalized)) return [];
     return [line
       .replace(/^(?:hướng dẫn|ghi chú)\s*[:：]?\s*/i, "")
-      .replace(/(?:dùng lúc|uống lúc)\s*\d{1,2}:\d{2}\s*[,;]?/i, "")
+      .replace(/(?:dùng lúc|uống lúc)\s*(?:[A-Z]{1,3}\s*)?\d[\d:./-]*\s*[,;]?/i, "")
       .trim()];
   });
   return [...new Set(collected)].join(" ").slice(0, 500);
