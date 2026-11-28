@@ -19,19 +19,44 @@ function cleanLine(value: string): string {
   return value.replace(/[•·▪◦]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function candidateFromLine(line: string, index: number): MedicineCandidate | null {
-  const normalized = line.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+function normalizeForMatch(value: string): string {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function findNumberedTableRows(lines: string[]): Set<number> {
+  const tableStart = lines.findIndex(line => {
+    const normalized = normalizeForMatch(line);
+    return /\b(?:bang\s+du\s+lieu\s+thuoc|danh\s+sach\s+thuoc)\b/.test(normalized)
+      || (/\bstt\b/.test(normalized) && /\bten\s+(?:mau|thuoc)\b/.test(normalized) && /\bham\s+luong\b/.test(normalized));
+  });
+  if (tableStart < 0) return new Set();
+
+  // Only trust numbered names inside an explicitly identified medicine table.
+  // Stop before notes/instructions so numbered directions cannot become medicines.
+  const endMarkers = /^(?:cac\s+chi\s+tiet|chi\s+tiet\s+can|ghi\s+chu|huong\s+dan|luu\s+y|khong\s+tu\s+suy\s+doan|ket\s+luan)\b/;
+  const tableEnd = lines.findIndex((line, index) => index > tableStart && endMarkers.test(normalizeForMatch(line)));
+  const end = tableEnd < 0 ? lines.length : tableEnd;
+  const rows = new Set<number>();
+
+  for (let index = tableStart + 1; index < end; index++) {
+    if (/^\s*\d{1,2}[.)-]\s+\S/.test(lines[index])) rows.add(index);
+  }
+  return rows;
+}
+
+function candidateFromLine(line: string, index: number, allowNumberedName = false): MedicineCandidate | null {
+  const normalized = normalizeForMatch(line);
   if (!line || EXCLUDED_PREFIX.test(normalized)) return null;
   const explicit = /^(?:tên thuốc|thuốc)\s*[:：]\s*(.+)$/i.exec(line);
   const numbered = /^\s*\d{1,2}[.)-]\s*(.+)$/.exec(line);
   const content = explicit?.[1] ?? numbered?.[1] ?? line;
-  const contentNormalized = content.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const contentNormalized = normalizeForMatch(content);
   if (EXCLUDED_PREFIX.test(contentNormalized)) return null;
   const strengthMatch = STRENGTH.exec(content);
 
   // A numbered instruction or arbitrary line is not a medicine name.
-  // Accept only a line with a readable strength, or an explicit medicine-name label.
-  if (!strengthMatch && !explicit) return null;
+  // A number-only row is accepted only inside a clearly labelled medicine table.
+  if (!strengthMatch && !explicit && !(numbered && allowNumberedName)) return null;
 
   const name = (strengthMatch ? content.slice(0, strengthMatch.index) : content)
     .replace(/^\s*\d{1,2}[.)-]\s*/, "")
@@ -106,8 +131,9 @@ function extractDirections(lines: string[]): string {
 export function parsePrescriptionText(text: string): PrescriptionParseResult {
   const lines = text.split(/\r?\n/).map(cleanLine).filter(Boolean);
   const candidates: MedicineCandidate[] = [];
+  const numberedTableRows = findNumberedTableRows(lines);
   for (let index = 0; index < lines.length; index++) {
-    const candidate = candidateFromLine(lines[index], index);
+    const candidate = candidateFromLine(lines[index], index, numberedTableRows.has(index));
     if (candidate) candidates.push(candidate);
   }
 
@@ -133,6 +159,7 @@ export function parsePrescriptionText(text: string): PrescriptionParseResult {
     if (frequency > 0 && intakeTimes.some(time => !time)) {
       warnings.push(candidate.name + ": OCR chưa đọc rõ một hoặc nhiều giờ uống. Hãy tự chọn giờ; ứng dụng không tự đoán.");
     }
+    if (!candidate.strength) warnings.push(candidate.name + ": OCR chưa đọc rõ hàm lượng; cần đối chiếu ảnh và nhập thủ công nếu có.");
     if (frequency === 0) warnings.push(candidate.name + ": chưa nhận diện rõ số lần sử dụng trong ngày; cần chọn và xác nhận.");
     if (!dose.dosage || !dose.dosageUnit) warnings.push(candidate.name + ": chưa nhận diện rõ liều lượng hoặc đơn vị; cần nhập thủ công.");
 

@@ -77,6 +77,34 @@ Thời điểm: OB 45 và 18:45.
   assert.match(result.warnings.join(" "), /chưa đọc rõ/);
 });
 
+test("splits numbered medicine names from a clearly labelled OCR table even when other columns are unreadable", () => {
+  const result = parsePrescriptionText(`
+BẢNG DỮ LIỆU THUỐC GIẢ LẬP
+STT / TÊN MẪU HÀM LƯỢNG LIỀU MẪU
+01. Alpha One
+02. Beta Two
+03. Gamma Syrup
+04. Delta Mix
+CÁC CHI TIẾT CẦN OCR ĐỌC ĐÚNG
+- Dấu phẩy thập phân: 12,5 mg và 0,75 g
+- Hướng dẫn kiểm thử
+`);
+  assert.deepEqual(result.medications.map(item => item.name), [
+    "Alpha One", "Beta Two", "Gamma Syrup", "Delta Mix",
+  ]);
+  assert.deepEqual(result.sourceNameLines, [
+    "01. Alpha One", "02. Beta Two", "03. Gamma Syrup", "04. Delta Mix",
+  ]);
+  for (const item of result.medications) {
+    assert.equal(item.strengthText, "");
+    assert.equal(item.dosage, "");
+    assert.equal(item.dosageUnit, "");
+    assert.equal(item.frequency, 0);
+    assert.deepEqual(item.intakeTimes, []);
+  }
+  assert.match(result.warnings.join(" "), /chưa đọc rõ hàm lượng/);
+});
+
 test("does not treat a numbered instruction as a medicine name", () => {
   const result = parsePrescriptionText(`
 1. Uống sau ăn 500 mg.
