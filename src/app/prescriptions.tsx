@@ -218,8 +218,8 @@ const styles = StyleSheet.create({
   viewButton: { backgroundColor: colors.primary, borderRadius: 10, minHeight: 44, paddingHorizontal: 14, alignItems: "center", justifyContent: "center" },
   viewButtonText: { color: "#FFFFFF", fontSize: 15, fontWeight: "700" },
   modalBackdrop: { flex: 1, backgroundColor: "rgba(0,0,0,0.72)", padding: 12, justifyContent: "center" },
-  modalCard: { backgroundColor: "#FFFFFF", borderRadius: 14, padding: 12, maxHeight: "92%" },
+  modalCard: { backgroundColor: "#FFFFFF", borderRadius: 14, padding: 12, height: "92%" },
   modalHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingBottom: 8 },
   close: { color: colors.primary, fontSize: 16, fontWeight: "700" },
-  fullImage: { width: "100%", height: "82%", minHeight: 300, backgroundColor: "#111111" },
+  fullImage: { width: "100%", flex: 1, minHeight: 300, backgroundColor: "#111111" },
 });

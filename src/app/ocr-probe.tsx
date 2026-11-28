@@ -215,9 +215,12 @@ export default function OcrProbe() {
       if (family) await createMedicationRequestsFromPrescription(user, profile, seniorUid, normalized, image);
       else if (profile.role === "senior") await createMedicationsFromPrescription(user, profile, seniorUid, normalized, image);
       else throw new Error("wrong-role");
+      const photoMessage = selected
+        ? " Ảnh gốc đã được lưu riêng tư trong hồ sơ người cao tuổi; người chăm sóc đang kết nối có thể xem."
+        : " Đây là ảnh mẫu thử nghiệm nên không có ảnh gốc để lưu.";
       const message = family
-        ? "Đã gửi " + normalized.length + " đề xuất thuốc. Người cao tuổi phải duyệt trước khi thuốc được thêm chính thức."
-        : "Đã thêm " + normalized.length + " loại thuốc vào danh sách quản lý thuốc.";
+        ? "Đã gửi " + normalized.length + " đề xuất thuốc. Người cao tuổi phải duyệt trước khi thuốc được thêm chính thức." + photoMessage
+        : "Đã thêm " + normalized.length + " loại thuốc vào danh sách quản lý thuốc." + photoMessage;
       Alert.alert("Nhập thuốc từ đơn thuốc", message, [{ text: "Đóng", onPress: () => router.back() }]);
     } catch (cause) {
       setSaveError(medicationErrorMessage(cause));

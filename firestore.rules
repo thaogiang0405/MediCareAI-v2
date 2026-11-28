@@ -1118,9 +1118,9 @@ service cloud.firestore {
     match /elderlyProfiles/{uid}/prescriptions/{prescriptionId} {
       // Prescription photos belong to the elderly profile. The owner and every
       // currently connected caregiver may read; uploads are immutable.
-      allow get, list: if canAccessMedicationProfile(uid)
-        && resource.data.ownerUid == uid
-        && resource.data.status == 'active';
+      // Records are immutable and only created by the strict schema below.
+      // The path itself scopes every query to one elderly owner's archive.
+      allow get, list: if canAccessMedicationProfile(uid);
       allow create: if isValidPrescriptionCreate(uid, prescriptionId);
       allow update, delete: if false;
     }
