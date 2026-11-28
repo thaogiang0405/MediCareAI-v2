@@ -6,6 +6,7 @@ on:
       - feature/phase-02-auth
       - feature/phase-03-family-connection
       - feature/phase-04-medication-management
+      - feature/phase-05-medication-reminders
   pull_request:
     branches:
       - main

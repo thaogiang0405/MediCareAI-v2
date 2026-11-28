@@ -5,17 +5,13 @@ import { useAuth } from "@/features/auth/AuthProvider";
 import { colors } from "@/theme";
 import SeniorConnectionPanel from "@/features/connection/SeniorConnectionPanel";
 import MedicationPanel from "@/features/medication/MedicationPanel";
+import ScheduleHomeCard from "@/features/medication/ScheduleHomeCard";
 
 const features = [
   {
     symbol: "♡",
     title: "Sức khỏe",
     description: "Theo dõi các chỉ số cơ thể.",
-  },
-  {
-    symbol: "◷",
-    title: "Nhắc nhở",
-    description: "Lịch chăm sóc mỗi ngày.",
   },
 ];
 
@@ -46,13 +42,15 @@ export default function SeniorHomeScreen() {
           </Text>
         </View>
 
+        <ScheduleHomeCard />
+
         <SeniorConnectionPanel />
 
         <MedicationPanel />
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Tiện ích chăm sóc</Text>
-          <Text style={styles.sectionCaption}>2 tiện ích</Text>
+          <Text style={styles.sectionCaption}>1 tiện ích</Text>
         </View>
 
         <View style={styles.featureGrid}>

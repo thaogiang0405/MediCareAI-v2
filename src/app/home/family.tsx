@@ -5,6 +5,7 @@ import { useAuth } from "@/features/auth/AuthProvider";
 import { colors } from "@/theme";
 import FamilyConnectionPanel from "@/features/connection/FamilyConnectionPanel";
 import MedicationPanel from "@/features/medication/MedicationPanel";
+import ScheduleHomeCard from "@/features/medication/ScheduleHomeCard";
 
 const features = [
   {
@@ -50,6 +51,8 @@ export default function FamilyHomeScreen() {
             Cùng quan tâm và chăm sóc sức khỏe người thân.
           </Text>
         </View>
+
+        <ScheduleHomeCard />
 
         <FamilyConnectionPanel />
 

@@ -3,12 +3,13 @@ import {
   ActivityIndicator, Alert, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
 } from "react-native";
 import type { User } from "firebase/auth";
+import { useRouter } from "expo-router";
 import { useAuth } from "@/features/auth/AuthProvider";
 import type { Profile } from "@/features/profile/profile";
 import { colors } from "@/theme";
 import { watchConnections, type ConnectionRecord } from "@/features/connection/connection";
 import {
-  createMedicationRequest, deleteMedication, medicationErrorMessage, recordMedicationIntake,
+  createMedicationRequest, deleteMedication, medicationErrorMessage,
   reactivateMedication, reviewMedicationRequest, saveMedication, stopMedication,
   watchMedicationIntakeLogs, watchMedicationNotifications, watchMedicationRequests,
   watchMedications, type MedicationIntakeLogRecord, type MedicationNotificationRecord,
@@ -32,6 +33,7 @@ export default function MedicationPanel() {
 
 function MedicationContent({ user, profile }: { user: User; profile: Profile }) {
   const family = profile.role === "family";
+  const router = useRouter();
   const [connections, setConnections] = useState<ConnectionRecord[] | null>(family ? null : []);
   const [seniorUid, setSeniorUid] = useState(family ? "" : user.uid);
   const [medicationSnapshot, setMedicationSnapshot] = useState<{
@@ -314,21 +316,9 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
     );
   }
 
-  function recordIntake(item: MedicationRecord) {
-    Alert.alert(
-      "Xác nhận đã uống thuốc?",
-      "Chỉ xác nhận nếu người cao tuổi đã thực tế uống thuốc này. Ứng dụng sẽ lưu người ghi nhận và thời điểm.",
-      [
-        { text: "Để sau", style: "cancel" },
-        {
-          text: "Xác nhận đã uống",
-          onPress: () => void perform(
-            () => recordMedicationIntake(user, profile, selectedSeniorUid, item),
-            "Đã ghi nhận uống thuốc.",
-          ),
-        },
-      ],
-    );
+  function openSchedule() {
+    if (!isReady) return;
+    router.push({pathname:"/medication-schedule",params:{seniorUid:selectedSeniorUid}});
   }
 
   async function perform(task: () => Promise<void>, success: string) {
@@ -500,7 +490,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
                 </Text> : null;
               })()}
               <View style={styles.actions}>
-                {item.status === "active" && <Pressable disabled={busy} style={styles.secondaryButton} onPress={() => recordIntake(item)}><Text style={styles.secondaryText}>Đã uống thuốc</Text></Pressable>}
+                {item.status === "active" && <Pressable disabled={busy} style={styles.secondaryButton} onPress={openSchedule}><Text style={styles.secondaryText}>Xác nhận theo lịch</Text></Pressable>}
                 <Pressable style={styles.secondaryButton} onPress={() => openEdit(item)}><Text style={styles.secondaryText}>{family ? "Đề xuất chỉnh sửa" : "Chỉnh sửa"}</Text></Pressable>
                 {item.status === "active" && <Pressable style={styles.secondaryButton} onPress={() => confirmStop(item)}><Text style={styles.secondaryText}>{family ? "Đề xuất ngừng" : "Ngừng dùng"}</Text></Pressable>}
                 {!family && item.status === "inactive" && <Pressable disabled={busy} style={styles.primaryButton} onPress={() => confirmReactivate(item)}><Text style={styles.primaryText}>Sử dụng lại</Text></Pressable>}
@@ -617,7 +607,7 @@ function CalendarField({ label, value, minDate, expanded, onToggle, onSelect }: 
   </View>;
 }
 
-function Calendar({ value, minDate, onSelect }: { value: string; minDate?: string; onSelect: (value: string) => void }) {
+export function Calendar({ value, minDate, onSelect, allowClear = true }: { value: string; minDate?: string; onSelect: (value: string) => void; allowClear?: boolean }) {
   const now = new Date();
   const today = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-");
   const anchor = isCalendarDate(value) ? value : minDate && isCalendarDate(minDate) && minDate > today ? minDate : today;
@@ -644,7 +634,7 @@ function Calendar({ value, minDate, onSelect }: { value: string; minDate?: strin
       })}
     </View>)}
     <View style={styles.frequencyRow}>
-      <Pressable style={styles.secondaryButton} onPress={() => onSelect("")}><Text style={styles.secondaryText}>Bỏ chọn ngày</Text></Pressable>
+      {allowClear && <Pressable style={styles.secondaryButton} onPress={() => onSelect("")}><Text style={styles.secondaryText}>Bỏ chọn ngày</Text></Pressable>}
       <Pressable style={[styles.secondaryButton, !!minDate && today < minDate && styles.disabled]} disabled={!!minDate && today < minDate} onPress={() => onSelect(today)}><Text style={styles.secondaryText}>Hôm nay</Text></Pressable>
     </View>
   </View>;

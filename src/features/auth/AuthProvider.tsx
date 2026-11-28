@@ -3,6 +3,7 @@ import { onAuthStateChanged, signOut, type User } from "firebase/auth";
 import { services, firebaseError } from "@/lib/firebase";
 import { readProfile, type Profile } from "@/features/profile/profile";
 import { authError } from "./validation";
+import { clearMedicationReminders } from "@/features/medication/reminders";
 
 type Session = { status: "loading" | "guest" | "missing" | "ready" | "error"; user: User | null; profile: Profile | null; message?: string };
 type Context = Session & { refresh: () => Promise<void>; logout: () => Promise<void> };
@@ -51,7 +52,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!services) return;
     ++generation.current;
     setSession(loading);
-    try { await signOut(services.auth); }
+    try {
+      // Cancel this app's local medication reminders before releasing the session.
+      await clearMedicationReminders().catch(() => {});
+      await signOut(services.auth);
+    }
     finally { await load(services.auth.currentUser); }
   }
   return <AuthContext.Provider value={{ ...session, refresh, logout }}>{children}</AuthContext.Provider>;
