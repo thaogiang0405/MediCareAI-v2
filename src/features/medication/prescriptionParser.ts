@@ -7,7 +7,6 @@ const EXCLUDED_PREFIX = /^(?:ma|ngay|ghi chu|ham luong|lieu|so luong|thoi gian|t
 const TIME = /\b(?:[01]?\d|2[0-3]):[0-5]\d\b/g;
 const DOSE = /(?:mỗi\s+lần|liều(?:\s+mẫu|\s+dùng)?|liều\s+uống)\s*[:：]?\s*(\d+(?:[.,]\d+)?|\d+\s*\/\s*\d+)\s*(viên\s*nang|viên|ml|gói|giọt|ống|thìa|mg|mcg|g)(?:\s*\/\s*lần)?/i;
 const DOSE_SHORT = /(\d+(?:[.,]\d+)?|\d+\s*\/\s*\d+)\s*(viên\s*nang|viên|ml|gói|giọt|ống|thìa|mg|mcg|g)\s*\/\s*lần/i;
-const FREQUENCY = /(?:mỗi\s+ngày|ngày)\s*(\d+)\s*lần|\b(\d+)\s*lần\s*\/\s*ngày/i;
 
 function cleanLine(value: string): string {
   return value.replace(/[•·▪◦]/g, " ").replace(/\s+/g, " ").trim();

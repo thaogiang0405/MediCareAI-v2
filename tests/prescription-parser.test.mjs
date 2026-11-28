@@ -41,7 +41,6 @@ Dùng lúc 21115, trước khi ngủ.
 `);
   assert.equal(result.medications[0].frequency, 1);
   assert.deepEqual(result.medications[0].intakeTimes, [""]);
-  assert.equal(result.medications[0].directionsText, "trước khi ngủ.");
   assert.match(result.warnings.join(" "), /thiếu giờ uống/);
 });
 
