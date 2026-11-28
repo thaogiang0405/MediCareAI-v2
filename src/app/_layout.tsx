@@ -30,6 +30,7 @@ function Routes() {
     <Stack.Protected guard={session.status === "ready"}>
       <Stack.Screen name="profile"/>
       <Stack.Screen name="medication-schedule"/>
+      <Stack.Screen name="ocr-probe"/>
     </Stack.Protected>
   </Stack>;
 }
