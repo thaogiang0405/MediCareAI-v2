@@ -36,6 +36,13 @@ function parseDose(text: string): { dosage: string; dosageUnit: string } {
   return { dosage: match[1].replace(/\s+/g, ""), dosageUnit: match[2].toLowerCase().replace(/\s+/g, " ") };
 }
 
+function parseFrequency(text: string): number {
+  const normalized = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const match = /(?:moi\s+ngay|ngay)\s*(\d+)\s*lan|\b(\d+)\s*lan\s*\/\s*ngay/i.exec(normalized);
+  return match ? Number(match[1] ?? match[2]) : 0;
+}
+
+
 function inferForm(unit: string, text: string): MedicationForm {
   const lower = (unit + " " + text).toLocaleLowerCase("vi");
   if (lower.includes("viên nang")) return "capsule";
@@ -73,8 +80,7 @@ export function parsePrescriptionText(text: string): PrescriptionParseResult {
     const block = lines.slice(candidate.index, nextIndex);
     const blockText = block.join("\n");
     const dose = parseDose(blockText);
-    const frequencyMatch = FREQUENCY.exec(blockText);
-    const frequency = frequencyMatch ? Number(frequencyMatch[1] ?? frequencyMatch[2]) : 0;
+    const frequency = parseFrequency(blockText);
     const times = [...new Set(blockText.match(TIME) ?? [])];
     const intakeTimes = frequency > 0
       ? Array.from({ length: frequency }, (_, timeIndex) => times[timeIndex] ?? "")

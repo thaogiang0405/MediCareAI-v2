@@ -63,3 +63,15 @@ Ngày: 28/11/2026
 `);
   assert.equal(result.medications.length, 0);
 });
+
+test("recognizes clear unaccented frequency words but does not repair malformed times", () => {
+  const result = parsePrescriptionText(`
+Tên thuốc: Sample Delta 5 mg
+Liều mẫu: 2 miflan, ngay 2 lan.
+Thời điểm: OB 45 và 18:45.
+`);
+  assert.equal(result.medications[0].frequency, 2);
+  assert.deepEqual(result.medications[0].intakeTimes, ["18:45", ""]);
+  assert.equal(result.medications[0].dosage, "");
+  assert.match(result.warnings.join(" "), /thiếu giờ uống/);
+});
