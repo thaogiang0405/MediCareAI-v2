@@ -22,7 +22,7 @@ export default function ScheduleHomeCard() {
       ? ready ? count+" / "+doses.length+" liều đã xác nhận"+(next?" · Tiếp theo "+next.time:"")
         : medicationError||logError?"Chưa đồng bộ được lịch.":"Đang tải lịch..."
       : "Theo dõi lịch và hỗ trợ ghi nhận cho người thân đã kết nối."}</Text>
-    {senior&&ready&&doses.length>0&&<View style={styles.track}><View style={[styles.fill,{width:(count/doses.length*100)+"%" as `${number}%`}]} /></View>}
+    {senior&&ready&&doses.length>0&&<View style={styles.track}><View style={[styles.fill,{width:((count/doses.length*100)+"%") as `${number}%`}]} /></View>}
     <Pressable accessibilityRole="button" style={styles.button} onPress={()=>router.push("/medication-schedule")}><Text style={styles.buttonText}>Xem toàn bộ lịch  ›</Text></Pressable>
   </View>;
 }
