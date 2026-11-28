@@ -190,7 +190,7 @@ export async function loadPrescriptionImage(
     throw new Error("invalid-prescription-image");
   }
   const bytes = await getBytes(ref(storageService(), expectedPath), MAX_PRESCRIPTION_IMAGE_BYTES);
-  return "data:image/jpeg;base64," + bytesToBase64(bytes);
+  return "data:image/jpeg;base64," + bytesToBase64(new Uint8Array(bytes));
 }
 
 export function prescriptionErrorMessage(error: unknown) {

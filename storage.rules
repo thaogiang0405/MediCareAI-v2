@@ -38,12 +38,13 @@ service firebase.storage {
     match /elderlyProfiles/{uid}/prescriptions/{prescriptionId}/original.jpg {
       // Reads require both a current relationship and an active Firestore record.
       // No long-lived download URL is stored in Firestore or returned by the app.
-      allow read: if hasActivePrescriptionRecord(uid, prescriptionId)
+      allow read: if signedIn()
+        && hasActivePrescriptionRecord(uid, prescriptionId)
         && (isElderlyOwner(uid) || isConnectedCaregiver(uid));
 
       // One immutable, normalized JPEG per prescription. The caller must be
       // the owner or a currently connected caregiver for this elderly profile.
-      allow create: if (isElderlyOwner(uid) || isConnectedCaregiver(uid))
+      allow create: if signedIn() && (isElderlyOwner(uid) || isConnectedCaregiver(uid))
         && request.resource.size > 0
         && request.resource.size <= 8388608
         && request.resource.contentType == 'image/jpeg'
@@ -56,7 +57,7 @@ service firebase.storage {
 
       // A failed Firestore batch may clean up its unlinked upload. Once the
       // metadata record exists, client-side deletion is denied.
-      allow delete: if (isElderlyOwner(uid)
+      allow delete: if signedIn() && (isElderlyOwner(uid)
           || (isConnectedCaregiver(uid) && resource.metadata.uploadedByUid == request.auth.uid))
         && !firestore.exists(/databases/(default)/documents/elderlyProfiles/$(uid)/prescriptions/$(prescriptionId));
     }
