@@ -371,6 +371,7 @@ function MedicationContent({ user, profile }: { user: User; profile: Profile }) 
       {isReady && (
         <>
           {__DEV__ && <Pressable disabled={busy} style={styles.secondaryButton} onPress={() => router.push({ pathname: "/ocr-probe", params: { seniorUid: selectedSeniorUid } })}><Text style={styles.secondaryText}>Nhập thuốc từ ảnh đơn thuốc (thử nghiệm)</Text></Pressable>}
+          <Pressable disabled={busy} style={styles.secondaryButton} onPress={() => router.push({ pathname: "/prescriptions", params: { seniorUid: selectedSeniorUid } })}><Text style={styles.secondaryText}>Xem ảnh đơn thuốc đã lưu</Text></Pressable>
           <View style={styles.requestPanel}>
             <Text style={styles.requestHeading}>Thông báo thuốc</Text>
             <Text style={styles.muted}>Thông báo cập nhật theo thời gian thực cho người cao tuổi và tất cả người chăm sóc đang kết nối.</Text>

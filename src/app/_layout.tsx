@@ -31,6 +31,7 @@ function Routes() {
       <Stack.Screen name="profile"/>
       <Stack.Screen name="medication-schedule"/>
       <Stack.Screen name="ocr-probe"/>
+      <Stack.Screen name="prescriptions"/>
     </Stack.Protected>
   </Stack>;
 }

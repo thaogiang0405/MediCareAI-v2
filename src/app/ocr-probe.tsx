@@ -206,8 +206,14 @@ export default function OcrProbe() {
     setSaving(true); setSaveError("");
     try {
       const normalized = drafts.map(normalizeMedicationDraft);
-      if (family) await createMedicationRequestsFromPrescription(user, profile, seniorUid, normalized);
-      else if (profile.role === "senior") await createMedicationsFromPrescription(user, profile, seniorUid, normalized);
+      const image = selected ? {
+        base64: selected.base64,
+        source: selected.source,
+        width: selected.width,
+        height: selected.height,
+      } : undefined;
+      if (family) await createMedicationRequestsFromPrescription(user, profile, seniorUid, normalized, image);
+      else if (profile.role === "senior") await createMedicationsFromPrescription(user, profile, seniorUid, normalized, image);
       else throw new Error("wrong-role");
       const message = family
         ? "Đã gửi " + normalized.length + " đề xuất thuốc. Người cao tuổi phải duyệt trước khi thuốc được thêm chính thức."
@@ -225,7 +231,7 @@ export default function OcrProbe() {
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Pressable accessibilityRole="button" style={styles.secondary} onPress={() => router.back()}><Text style={styles.secondaryText}>‹ Quay lại</Text></Pressable>
         <Text style={styles.title}>Nhập thuốc từ ảnh đơn thuốc</Text>
-        <Text style={styles.warning}>Bản thử nghiệm tải bộ OCR từ Internet. Chỉ dùng ảnh giả lập hoặc đã ẩn danh hoàn toàn. Ảnh đơn thuốc chưa được lưu. Mọi thông tin phải được kiểm tra thủ công trước khi xác nhận.</Text>
+        <Text style={styles.warning}>Bản thử nghiệm tải bộ OCR từ Internet. Chỉ dùng ảnh giả lập hoặc đã ẩn danh hoàn toàn. Khi xác nhận thuốc, ảnh thật sẽ được lưu riêng tư vào hồ sơ người cao tuổi; ảnh mẫu không được lưu. Mọi thông tin phải được kiểm tra thủ công trước khi xác nhận.</Text>
         {!user || !profile || !seniorUid
           ? <Text style={styles.warning}>Không xác định được hồ sơ người cao tuổi. Hãy quay lại Quản lý thuốc và mở chức năng này từ hồ sơ cần nhập.</Text>
           : <Text style={styles.muted}>{family ? "Kết quả sẽ được gửi thành đề xuất để người cao tuổi duyệt." : "Bạn đang nhập thuốc vào hồ sơ của chính mình."}</Text>}
