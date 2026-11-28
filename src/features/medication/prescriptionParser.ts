@@ -66,7 +66,7 @@ function extractDirections(lines: string[]): string {
 
 export function parsePrescriptionText(text: string): PrescriptionParseResult {
   const lines = text.split(/\r?\n/).map(cleanLine).filter(Boolean);
-  const candidates: Array<{ index: number; name: string; strength: string }> = [];
+  const candidates: { index: number; name: string; strength: string }[] = [];
   for (let index = 0; index < lines.length; index++) {
     const candidate = candidateFromLine(lines[index]);
     if (candidate) candidates.push({ index, ...candidate });

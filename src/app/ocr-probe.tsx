@@ -3,7 +3,7 @@ import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Tex
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
-import * as ImageManipulator from "expo-image-manipulator";
+import { ImageManipulator, SaveFormat } from "expo-image-manipulator";
 import { WebView } from "react-native-webview";
 import { colors } from "@/theme";
 import { useAuth } from "@/features/auth/AuthProvider";
@@ -111,7 +111,7 @@ export default function OcrProbe() {
       if (!asset?.uri) { setError("Không lấy được ảnh. Vui lòng thử lại."); return; }
       const context = ImageManipulator.manipulate(asset.uri, { maxWidth: 2000, maxHeight: 2800 });
       const rendered = await context.renderAsync();
-      const normalized = await rendered.saveAsync({ format: ImageManipulator.SaveFormat.JPEG, compress: 0.94, base64: true });
+      const normalized = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.94, base64: true });
       if (!normalized.base64 || normalized.base64.length > MAX_BASE64_CHARS || !/^[A-Za-z0-9+/=]+$/.test(normalized.base64)) {
         resetResult(); setSelected(null); setError("Ảnh không hợp lệ hoặc quá lớn sau khi chuẩn hóa. Hãy thử ảnh khác."); return;
       }
