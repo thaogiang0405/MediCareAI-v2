@@ -61,6 +61,7 @@ test("ignores strength-like values in notes and headers", () => {
   const result = parsePrescriptionText(`
 MEDICARE AI - OCR TEST
 Ghi chú: kiểm thử 1,5 ml và 0,25 mg.
+- Dấu phẩy thập phân: 12,5 mg và 0,75 g
 Ngày: 28/11/2026
 `);
   assert.equal(result.medications.length, 0);

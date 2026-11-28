@@ -46,7 +46,8 @@ function findNumberedTableRows(lines: string[]): Set<number> {
 
 function candidateFromLine(line: string, index: number, allowNumberedName = false): MedicineCandidate | null {
   const normalized = normalizeForMatch(line);
-  if (!line || EXCLUDED_PREFIX.test(normalized)) return null;
+  // Bullet/dash notes are not medicine rows, even when they mention a strength-like value.
+  if (!line || /^\s*[-–—*]\s+/.test(line) || EXCLUDED_PREFIX.test(normalized)) return null;
   const explicit = /^(?:tên thuốc|thuốc)\s*[:：]\s*(.+)$/i.exec(line);
   const numbered = /^\s*\d{1,2}[.)-]\s*(.+)$/.exec(line);
   const content = explicit?.[1] ?? numbered?.[1] ?? line;
