@@ -127,9 +127,9 @@ function Content({user,profile,uid,name}:{user:User;profile:Profile;uid:string;n
           return <View key={dose.id} style={s.group}>
             {(index===0||doses[index-1].time!==dose.time)&&<Text style={s.slot}>{dose.time}</Text>}
             <View style={s.card}>
-              <View style={s.row}><Text style={[s.title,s.flex]}>{m.name}{m.strengthText?" · "+m.strengthText:""}</Text><Text style={[s.status,log?s.green:status==="Sắp đến giờ"?s.blue:s.orange]}>{status}</Text></View>
-              <Text style={s.dosage}>{m.dosage} {m.dosageUnit}</Text>
-              {!!m.directionsText&&<><Pressable accessibilityRole="button" accessibilityState={{expanded:expanded===dose.id}} onPress={()=>setExpanded(v=>v===dose.id?null:dose.id)} style={s.detailButton}><Text style={s.buttonText}>{expanded===dose.id?"Ẩn hướng dẫn":"Xem hướng dẫn sử dụng"}</Text></Pressable>{expanded===dose.id&&<Text style={s.muted}>{m.directionsText}</Text>}</>}
+              <View style={s.row}><Text style={[s.title,s.flex]}>{log?.medicationName??m.name}{(log?.strengthText??m.strengthText)?" · "+(log?.strengthText??m.strengthText):""}</Text><Text style={[s.status,log?s.green:status==="Sắp đến giờ"?s.blue:s.orange]}>{status}</Text></View>
+              <Text style={s.dosage}>{log?.dosage??m.dosage} {log?.dosageUnit??m.dosageUnit}</Text>
+              {!log&&!!m.directionsText&&<><Pressable accessibilityRole="button" accessibilityState={{expanded:expanded===dose.id}} onPress={()=>setExpanded(v=>v===dose.id?null:dose.id)} style={s.detailButton}><Text style={s.buttonText}>{expanded===dose.id?"Ẩn hướng dẫn":"Xem hướng dẫn sử dụng"}</Text></Pressable>{expanded===dose.id&&<Text style={s.muted}>{m.directionsText}</Text>}</>}
               {log?<Text style={s.muted}>Ghi nhận: {recorder(log,profile,uid,name)}</Text>:date===today&&<Action primary disabled={busy} label={busy?"Đang ghi nhận...":"✓  Xác nhận đã uống"} onPress={()=>confirm(dose)}/>}
             </View>
           </View>;

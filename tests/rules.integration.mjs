@@ -891,3 +891,32 @@ test("Phase 05: one immutable confirmation per scheduled dose; connected caregiv
   await assertSucceeds(disconnect("f1", "s1", "ABCD2345", "f1"));
   await assertFails(getDoc(ref(family, "20:00")));
 });
+
+
+test("Phase 05: concurrent transactions converge; schedule rejects expired or other-profile doses", async () => {
+  await seedUsers();
+  await assertSucceeds(issue("f1","ABCD2345"));
+  await assertSucceeds(connect("f1","s1","ABCD2345"));
+  const senior=db("s1"), family=db("f1");
+  const date=new Date(Date.now()+7*3600000).toISOString().slice(0,10);
+  const medRef=doc(senior,"elderlyProfiles","s1","medications","concurrent-med");
+  await assertSucceeds(setDoc(medRef,{...medicationData("s1","s1"),startDate:"",endDate:""}));
+  const ref=(store,time)=>doc(store,"elderlyProfiles","s1","medicationIntakeLogs","dose_"+date+"_"+time+"_concurrent-med");
+  const data=(actor,role,time)=>({ownerUid:"s1",medicationId:"concurrent-med",medicationName:"Paracetamol",
+    scheduledDate:date,scheduledTime:time,dosage:"1",dosageUnit:"viên",strengthText:"500 mg",
+    recordedByUid:actor,recordedByRole:role,takenAt:serverTimestamp(),createdAt:serverTimestamp(),note:""});
+  const record=(store,actor,role)=>runTransaction(store,async tx=>{
+    const log=ref(store,"08:30");
+    if((await tx.get(log)).exists())return "existing";
+    tx.set(log,data(actor,role,"08:30"));return "created";
+  });
+  const outcomes=await Promise.all([record(senior,"s1","elderly"),record(family,"f1","caregiver")]);
+  assertEqual(outcomes.filter(value=>value==="created").length,1);
+  assertEqual(outcomes.filter(value=>value==="existing").length,1);
+  const stored=(await assertSucceeds(getDoc(ref(senior,"08:30")))).data();
+  if(!["s1","f1"].includes(stored.recordedByUid))throw new Error("Unexpected recorder");
+  await assertFails(setDoc(ref(family,"20:00"),{...data("f1","caregiver","20:00"),ownerUid:"s2"}));
+  await assertFails(setDoc(ref(family,"20:00"),{...data("f1","caregiver","20:00"),dosage:"9"}));
+  await assertSucceeds(updateDoc(medRef,{endDate:"2000-01-01",updatedByUid:"s1",updatedAt:serverTimestamp(),revision:2}));
+  await assertFails(setDoc(ref(family,"20:00"),data("f1","caregiver","20:00")));
+});

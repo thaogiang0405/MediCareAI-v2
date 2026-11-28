@@ -1,14 +1,21 @@
-import * as Notifications from "expo-notifications";
 import { Platform } from "react-native";
 
 const namespace = "medicare-ai-v2-medication";
 export const supportsReminders = Platform.OS === "ios" || Platform.OS === "android";
-if (supportsReminders) {
-  Notifications.setNotificationHandler({
-    handleNotification: async () => ({
-      shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false,
-    }),
-  });
+// Load native notifications lazily so an unsupported Expo Go runtime never blocks auth or medication screens.
+let native: Promise<typeof import("expo-notifications")> | undefined;
+function loadNotifications() {
+  if (!native) {
+    native = import("expo-notifications").then(module => {
+      module.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false,
+        }),
+      });
+      return module;
+    }).catch(error => { native = undefined; throw error; });
+  }
+  return native;
 }
 let queue: Promise<unknown> = Promise.resolve();
 function serial<T>(work: () => Promise<T>): Promise<T> {
@@ -18,6 +25,7 @@ function serial<T>(work: () => Promise<T>): Promise<T> {
 }
 export async function notificationPermission(ask = false): Promise<boolean> {
   if (!supportsReminders) return false;
+  const Notifications = await loadNotifications();
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("medication", {
       name: "Nhắc uống thuốc", importance: Notifications.AndroidImportance.HIGH,
@@ -33,6 +41,8 @@ type Slot = {at: number; date: string; time: string};
 export function reconcileMedicationReminders(uid: string, slots: Slot[] | null, active: () => boolean = () => true) {
   return serial(async () => {
     if (!supportsReminders || !active()) return 0;
+    const Notifications = await loadNotifications();
+    if (!active()) return 0;
     const scheduled = (await Notifications.getAllScheduledNotificationsAsync())
       .filter(item => item.content.data?.namespace === namespace);
     // null = no authoritative data yet; retain matching account's last synchronized schedule.
