@@ -16,6 +16,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import { services } from "@/lib/firebase";
+import { deleteUnlinkedPrescriptionImage, uploadPrescriptionImage, type PrescriptionImageInput, type PrescriptionUpload } from "./prescriptions";
 import type { Profile } from "@/features/profile/profile";
 import { medicationValidationError, type MedicationDraft } from "./validation";
 import { buildDoses, doseTime, isScheduleMedication, shiftDate, vietnamDate, type Dose, type ScheduleMedication } from "./schedule";
@@ -512,39 +513,89 @@ export async function createMedicationRequest(
   await batch.commit();
 }
 
-export async function createMedicationsFromPrescription(user: User, profile: Profile, seniorUid: string, drafts: MedicationDraft[]) {
+function attachPrescriptionMetadata(
+  batch: ReturnType<typeof writeBatch>,
+  seniorUid: string,
+  profile: Profile,
+  upload: PrescriptionUpload,
+  linkedMedicationIds: string[],
+  linkedRequestIds: string[],
+) {
+  const uploadedByRole = profile.role === "senior" ? "elderly" : "caregiver";
+  batch.set(doc(database(), "elderlyProfiles", seniorUid, "prescriptions", upload.id), {
+    ownerUid: seniorUid,
+    storagePath: upload.storagePath,
+    contentType: "image/jpeg",
+    sizeBytes: upload.sizeBytes,
+    uploadedByUid: profile.uid,
+    uploadedByRole,
+    source: upload.source,
+    width: upload.width,
+    height: upload.height,
+    linkedMedicationIds,
+    linkedRequestIds,
+    createdAt: serverTimestamp(),
+    status: "active",
+  });
+}
+
+export async function createMedicationsFromPrescription(
+  user: User, profile: Profile, seniorUid: string, drafts: MedicationDraft[], image?: PrescriptionImageInput,
+) {
   assertSeniorOwner(user, profile, seniorUid);
   if (!Array.isArray(drafts) || drafts.length < 1 || drafts.length > 10
     || drafts.some(draft => medicationValidationError(draft) !== null)) throw new Error("invalid-request");
-  const batch = writeBatch(database());
-  for (const draft of drafts) {
-    const medicationRef = doc(medicationCollection(seniorUid));
-    batch.set(medicationRef, {
+
+  const db = database();
+  const upload = image ? await uploadPrescriptionImage(user, profile, seniorUid, image) : null;
+  try {
+    const batch = writeBatch(db);
+    const medicationRefs = drafts.map(() => doc(medicationCollection(seniorUid)));
+    if (upload) attachPrescriptionMetadata(batch, seniorUid, profile, upload, medicationRefs.map(item => item.id), []);
+    drafts.forEach((draft, index) => batch.set(medicationRefs[index], {
       ...draft, ownerUid: seniorUid, createdByUid: user.uid, updatedByUid: user.uid,
       status: "active", deletedAt: null, createdAt: serverTimestamp(), updatedAt: serverTimestamp(), revision: 1,
-    });
+    }));
+    await batch.commit();
+    return upload?.id ?? null;
+  } catch (error) {
+    if (upload) await deleteUnlinkedPrescriptionImage(upload).catch(() => {});
+    throw error;
   }
-  await batch.commit();
 }
 
-export async function createMedicationRequestsFromPrescription(user: User, profile: Profile, seniorUid: string, drafts: MedicationDraft[]) {
+export async function createMedicationRequestsFromPrescription(
+  user: User, profile: Profile, seniorUid: string, drafts: MedicationDraft[], image?: PrescriptionImageInput,
+) {
   assertCaregiver(user, profile, seniorUid);
   if (!Array.isArray(drafts) || drafts.length < 1 || drafts.length > 10
     || drafts.some(draft => medicationValidationError(draft) !== null)) throw new Error("invalid-request");
-  const batch = writeBatch(database());
-  for (const draft of drafts) {
-    const requestRef = doc(requestCollection(seniorUid));
-    const notificationRef = doc(notificationCollection(seniorUid));
-    const medicationName = draft.name.trim().slice(0, 120);
-    batch.set(requestRef, {
-      ownerUid: seniorUid, medicationId: null, medicationName, requestType: "create", proposedData: draft,
-      requestedByUid: user.uid, reason: "Đề xuất thêm thuốc từ kết quả OCR đơn thuốc.",
-      status: "pending", createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
-      reviewedByUid: null, reviewedAt: null, reviewNote: "",
+
+  const db = database();
+  const upload = image ? await uploadPrescriptionImage(user, profile, seniorUid, image) : null;
+  try {
+    const batch = writeBatch(db);
+    const requestRefs = drafts.map(() => doc(requestCollection(seniorUid)));
+    const notificationRefs = drafts.map(() => doc(notificationCollection(seniorUid)));
+    if (upload) attachPrescriptionMetadata(batch, seniorUid, profile, upload, [], requestRefs.map(item => item.id));
+    drafts.forEach((draft, index) => {
+      const medicationName = draft.name.trim().slice(0, 120);
+      batch.set(requestRefs[index], {
+        ownerUid: seniorUid, medicationId: null, medicationName, requestType: "create", proposedData: draft,
+        requestedByUid: user.uid, reason: "Đề xuất thêm thuốc từ kết quả OCR đơn thuốc.",
+        status: "pending", createdAt: serverTimestamp(), updatedAt: serverTimestamp(),
+        reviewedByUid: null, reviewedAt: null, reviewNote: "",
+      });
+      batch.set(notificationRefs[index], notificationData(
+        seniorUid, profile, "proposal_submitted", null, medicationName, requestRefs[index].id, "create",
+      ));
     });
-    batch.set(notificationRef, notificationData(seniorUid, profile, "proposal_submitted", null, medicationName, requestRef.id, "create"));
+    await batch.commit();
+    return upload?.id ?? null;
+  } catch (error) {
+    if (upload) await deleteUnlinkedPrescriptionImage(upload).catch(() => {});
+    throw error;
   }
-  await batch.commit();
 }
 
 export async function reviewMedicationRequest(
@@ -716,6 +767,14 @@ export function medicationErrorMessage(error: unknown): string {
     ? String(error.code)
     : (error instanceof Error ? error.message : "");
   switch (code) {
+    case "storage-unavailable":
+    case "storage/bucket-not-found":
+      return "Firebase Storage chưa sẵn sàng. Kiểm tra Storage bucket và cấu hình EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET trước khi lưu ảnh.";
+    case "storage/unauthorized":
+    case "storage/unauthenticated":
+      return "Không có quyền lưu ảnh đơn thuốc. Hãy kiểm tra kết nối gia đình và Storage Rules.";
+    case "storage/retry-limit-exceeded":
+      return "Mạng không ổn định nên chưa lưu được ảnh. Vui lòng thử lại.";
     case "permission-denied":
       return "Firebase từ chối thao tác. Có thể Firestore Rules Phase 04 chưa được Publish lên staging. Hãy kiểm tra Rules trước khi thử lại; người chăm sóc không được sửa trực tiếp danh sách thuốc.";
     case "unavailable":
