@@ -25,6 +25,8 @@ function candidateFromLine(line: string, index: number): MedicineCandidate | nul
   const explicit = /^(?:tên thuốc|thuốc)\s*[:：]\s*(.+)$/i.exec(line);
   const numbered = /^\s*\d{1,2}[.)-]\s*(.+)$/.exec(line);
   const content = explicit?.[1] ?? numbered?.[1] ?? line;
+  const contentNormalized = content.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  if (EXCLUDED_PREFIX.test(contentNormalized)) return null;
   const strengthMatch = STRENGTH.exec(content);
 
   // A numbered instruction or arbitrary line is not a medicine name.

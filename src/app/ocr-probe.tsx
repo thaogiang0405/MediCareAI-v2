@@ -173,8 +173,8 @@ export default function OcrProbe() {
 
   function addTime(index: number) {
     setDrafts(current => current.map((draft, itemIndex) => {
-      if (itemIndex !== index || draft.frequency >= 6) return draft;
-      const nextCount = Math.max(draft.frequency, draft.intakeTimes.length) + 1;
+      if (itemIndex !== index || draft.frequency >= 6 || draft.intakeTimes.length >= 6) return draft;
+      const nextCount = draft.frequency > 0 ? draft.frequency + 1 : Math.max(1, draft.intakeTimes.length);
       const intakeTimes = Array.from({ length: nextCount }, (_, timeIndex) => draft.intakeTimes[timeIndex] ?? "");
       return { ...draft, frequency: nextCount, intakeTimes };
     }));
@@ -187,7 +187,7 @@ export default function OcrProbe() {
   }
 
   function openTimePicker(index: number, timeIndex: number, currentTime: string) {
-    const match = /^([01]\\d|2[0-3]):([0-5]\\d)$/.exec(currentTime);
+    const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(currentTime);
     setPickerHour(match ? Number(match[1]) : null);
     setPickerMinute(match ? Number(match[2]) : null);
     setTimePickerTarget({ draftIndex: index, timeIndex });
@@ -353,7 +353,7 @@ export default function OcrProbe() {
                   <Text style={styles.timeButtonAction}>Chọn giờ</Text>
                 </Pressable>
               </View>)}
-              <Pressable accessibilityRole="button" disabled={saving || draft.intakeTimes.length >= 6} style={styles.secondary} onPress={() => addTime(index)}><Text style={styles.secondaryText}>＋ Thêm khung giờ</Text></Pressable>
+              <Pressable accessibilityRole="button" disabled={saving || draft.frequency >= 6 || draft.intakeTimes.length >= 6} style={styles.secondary} onPress={() => addTime(index)}><Text style={styles.secondaryText}>＋ Thêm khung giờ</Text></Pressable>
               <Text style={styles.fieldLabel}>Hướng dẫn sử dụng</Text>
               <TextInput value={draft.directionsText} onChangeText={value => updateDraft(index, { directionsText: value })} style={[styles.input, styles.multiline]} multiline placeholder="Ví dụ: sau ăn" />
               {!!validation && <Text style={styles.error}>{validation}</Text>}
