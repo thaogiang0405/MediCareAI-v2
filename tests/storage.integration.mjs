@@ -101,10 +101,15 @@ test("elderly owner and active caregiver can upload and view the same private pr
     prescriptionData("s1", "caregiver-image", "f1", "caregiver", "library"),
   ));
 
-  const ownerRead = await assertSucceeds(getBytes(ref(bucket("s1"), caregiverPath)));
-  const caregiverRead = await assertSucceeds(getBytes(ref(bucket("f1"), caregiverPath)));
-  if (ownerRead.length !== 4 || caregiverRead.length !== 4) {
-    throw new Error("Expected both participants to read the same original image bytes.");
+  const ownerReadsCaregiverImage = await assertSucceeds(getBytes(ref(bucket("s1"), caregiverPath)));
+  const caregiverReadsCaregiverImage = await assertSucceeds(getBytes(ref(bucket("f1"), caregiverPath)));
+  const caregiverReadsOwnerImage = await assertSucceeds(getBytes(ref(bucket("f1"), ownerPath)));
+  if (
+    ownerReadsCaregiverImage.length !== 4
+    || caregiverReadsCaregiverImage.length !== 4
+    || caregiverReadsOwnerImage.length !== 4
+  ) {
+    throw new Error("Expected the elderly owner and active caregiver to read each other's prescription uploads.");
   }
 });
 
